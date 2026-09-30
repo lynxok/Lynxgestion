@@ -5,7 +5,7 @@ const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [authError, setAuthError] = useState(null);
     const [lastActivity, setLastActivity] = useState(Date.now());
 
@@ -67,13 +67,11 @@ export function AuthProvider({ children }) {
 
         const updateActivity = () => setLastActivity(Date.now());
 
-        // Listeners for activity
         window.addEventListener('mousemove', updateActivity);
         window.addEventListener('keydown', updateActivity);
         window.addEventListener('scroll', updateActivity);
         window.addEventListener('click', updateActivity);
 
-        // Verification of concurrent session every minute
         const sessionCheckId = setInterval(() => {
             verifySessionId(user.id);
         }, 60000);
@@ -89,7 +87,6 @@ export function AuthProvider({ children }) {
     }, [user, lastActivity]);
 
     useEffect(() => {
-        // Check active sessions and subscribe to auth changes
         const initSession = async () => {
             try {
                 const { data: { session } } = await supabase.auth.getSession();
@@ -101,8 +98,6 @@ export function AuthProvider({ children }) {
             } catch (err) {
                 console.error('Init session error:', err);
                 setUser(null);
-            } finally {
-                setLoading(false);
             }
         };
 
@@ -118,8 +113,6 @@ export function AuthProvider({ children }) {
             } catch (err) {
                 console.error('Auth state change error:', err);
                 setUser(null);
-            } finally {
-                setLoading(false);
             }
         });
 
@@ -141,11 +134,9 @@ export function AuthProvider({ children }) {
                 .single();
 
             if (error) {
-                console.error('Error fetching profile:', error);
+                console.warn('Profile fetch note:', error);
                 if (error.code === 'PGRST116') {
-                    setAuthError('Tu perfil no existe aún en la base de datos.');
-                } else {
-                    setAuthError('Error de servidor al verificar aprobación.');
+                    setAuthError('Tu perfil aún no existe en la base de datos. Regístrate para comenzar.');
                 }
                 await supabase.auth.signOut();
                 setUser(null);
@@ -155,7 +146,6 @@ export function AuthProvider({ children }) {
             if (profile?.is_approved) {
                 currentUser.role = profile.role;
 
-                // Sync session ID if not present or just logged in
                 if (!localStorage.getItem('lynx_session_id')) {
                     await syncSessionId(currentUser.id);
                 }
@@ -168,24 +158,28 @@ export function AuthProvider({ children }) {
             }
         } catch (err) {
             console.error('Auth check error:', err);
-            setAuthError('Error de autenticación inesperado.');
             setUser(null);
         }
     };
 
     const login = async (email, password) => {
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-        });
-        if (error) throw error;
+        setLoading(true);
+        try {
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
+            if (error) throw error;
 
-        if (data.user) {
-            await syncSessionId(data.user.id);
-            await checkUserApproval(data.user);
+            if (data.user) {
+                await syncSessionId(data.user.id);
+                await checkUserApproval(data.user);
+            }
+
+            return data;
+        } finally {
+            setLoading(false);
         }
-
-        return data;
     };
 
     const logout = async () => {
@@ -201,33 +195,7 @@ export function AuthProvider({ children }) {
 
     return (
         <AuthContext.Provider value={{ user, login, logout, loading, authError, setAuthError }}>
-            {loading ? (
-                <div style={{
-                    minHeight: '100vh',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexDirection: 'column',
-                    gap: '1.25rem',
-                    backgroundColor: '#070B14',
-                    color: '#F8FAFC',
-                    fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif"
-                }}>
-                    <div style={{
-                        width: '44px',
-                        height: '44px',
-                        border: '3px solid rgba(245, 158, 11, 0.15)',
-                        borderTopColor: '#F59E0B',
-                        borderRadius: '50%',
-                        animation: 'authSpin 0.8s linear infinite',
-                        boxShadow: '0 0 15px rgba(245, 158, 11, 0.2)'
-                    }} />
-                    <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#94A3B8', letterSpacing: '0.05em' }}>
-                        CARGANDO LYNX GESTIÓN...
-                    </span>
-                    <style>{`@keyframes authSpin { to { transform: rotate(360deg); } }`}</style>
-                </div>
-            ) : children}
+            {children}
         </AuthContext.Provider>
     );
 }
