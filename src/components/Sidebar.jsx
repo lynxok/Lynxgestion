@@ -6,6 +6,7 @@ import {
     PieChart, 
     FolderKanban, 
     BarChart3, 
+    Settings as SettingsIcon,
     LogOut, 
     ShieldCheck, 
     User, 
@@ -25,6 +26,7 @@ export default function Sidebar({ activeTab, setActiveTab }) {
         { id: 'statistics', label: 'Estadísticas Financieras', icon: <PieChart size={19} /> },
         { id: 'projects', label: 'Gestión de Proyectos', icon: <FolderKanban size={19} /> },
         { id: 'project-stats', label: 'Métricas de Proyectos', icon: <BarChart3 size={19} /> },
+        { id: 'settings', label: 'Configuraciones', icon: <SettingsIcon size={19} /> },
     ];
 
     const userInitial = user?.email ? user.email.charAt(0).toUpperCase() : 'U';

@@ -4,7 +4,8 @@ import MovementForm from '../components/MovementForm';
 import Statistics from '../components/Statistics';
 import Projects from '../components/Projects';
 import ProjectStats from '../components/ProjectStats';
-import { Receipt, PieChart, FolderKanban, BarChart3, Calendar } from 'lucide-react';
+import Settings from '../components/Settings';
+import { Receipt, PieChart, FolderKanban, BarChart3, Settings as SettingsIcon, Calendar } from 'lucide-react';
 import './Dashboard.css';
 
 export default function Dashboard() {
@@ -63,6 +64,15 @@ export default function Dashboard() {
                                     </div>
                                 </>
                             )}
+                            {activeTab === 'settings' && (
+                                <>
+                                    <div className="tab-icon-wrapper"><SettingsIcon size={22} /></div>
+                                    <div>
+                                        <h1>Módulo de Configuraciones</h1>
+                                        <p className="tab-subtitle">Administración de Cajas, Cuentas, Responsables de Gasto y Proveedores</p>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
 
@@ -79,6 +89,7 @@ export default function Dashboard() {
                     {activeTab === 'statistics' && <Statistics />}
                     {activeTab === 'projects' && <Projects />}
                     {activeTab === 'project-stats' && <ProjectStats />}
+                    {activeTab === 'settings' && <Settings />}
                 </div>
             </main>
         </div>

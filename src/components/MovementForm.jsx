@@ -14,7 +14,9 @@ import {
     User, 
     Calendar, 
     CreditCard, 
-    FileText 
+    FileText,
+    Truck,
+    Building
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
@@ -31,34 +33,72 @@ export default function MovementForm() {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('all');
 
+    // Parametric lists from Supabase
+    const [cashBoxes, setCashBoxes] = useState([]);
+    const [responsibles, setResponsibles] = useState([]);
+    const [suppliers, setSuppliers] = useState([]);
+
     const [formData, setFormData] = useState({
-        responsable: '',
+        cash_box_id: '',
+        responsable_id: '',
+        responsable_name: '',
+        supplier_id: '',
+        supplier_name: '',
         descripcion: '',
         monto: '',
         fecha: new Date().toISOString().split('T')[0],
         empresa: '',
-        cuenta: 'Mercado pago',
     });
 
     useEffect(() => {
-        fetchRecentMovements();
+        fetchInitialData();
     }, []);
 
-    const fetchRecentMovements = async () => {
+    const fetchInitialData = async () => {
         try {
             setFetching(true);
-            const { data, error } = await supabase
-                .from('movements')
-                .select('*')
-                .order('date', { ascending: false })
-                .order('created_at', { ascending: false })
-                .limit(50);
+            const [movRes, boxRes, respRes, suppRes] = await Promise.all([
+                supabase
+                    .from('movements')
+                    .select('*, cash_boxes(name, type), suppliers(name), expense_responsibles(name)')
+                    .order('date', { ascending: false })
+                    .order('created_at', { ascending: false })
+                    .limit(50),
+                supabase.from('cash_boxes').select('*').order('created_at', { ascending: true }),
+                supabase.from('expense_responsibles').select('*').order('name', { ascending: true }),
+                supabase.from('suppliers').select('*').order('name', { ascending: true }),
+            ]);
 
-            if (error) throw error;
-            setMovements(data || []);
+            if (movRes.data) setMovements(movRes.data);
+            if (boxRes.data) {
+                setCashBoxes(boxRes.data);
+                if (boxRes.data.length > 0 && !formData.cash_box_id) {
+                    setFormData(prev => ({ ...prev, cash_box_id: boxRes.data[0].id }));
+                }
+            }
+            if (respRes.data) {
+                setResponsibles(respRes.data);
+                if (respRes.data.length > 0 && !formData.responsable_id) {
+                    setFormData(prev => ({ 
+                        ...prev, 
+                        responsable_id: respRes.data[0].id,
+                        responsable_name: respRes.data[0].name 
+                    }));
+                }
+            }
+            if (suppRes.data) {
+                setSuppliers(suppRes.data);
+                if (suppRes.data.length > 0 && !formData.supplier_id) {
+                    setFormData(prev => ({ 
+                        ...prev, 
+                        supplier_id: suppRes.data[0].id,
+                        supplier_name: suppRes.data[0].name 
+                    }));
+                }
+            }
         } catch (error) {
-            console.error('Error fetching movements:', error);
-            toast.error('Error al cargar historial de movimientos');
+            console.error('Error fetching initial data:', error);
+            toast.error('Error al cargar datos del sistema');
         } finally {
             setFetching(false);
         }
@@ -66,7 +106,23 @@ export default function MovementForm() {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        if (name === 'responsable_id') {
+            const found = responsibles.find(r => r.id === value);
+            setFormData(prev => ({ 
+                ...prev, 
+                responsable_id: value, 
+                responsable_name: found ? found.name : '' 
+            }));
+        } else if (name === 'supplier_id') {
+            const found = suppliers.find(s => s.id === value);
+            setFormData(prev => ({ 
+                ...prev, 
+                supplier_id: value, 
+                supplier_name: found ? found.name : '' 
+            }));
+        } else {
+            setFormData(prev => ({ ...prev, [name]: value }));
+        }
     };
 
     const handleSubmit = async (e) => {
@@ -84,20 +140,25 @@ export default function MovementForm() {
         setLoading(true);
 
         try {
+            const selectedBox = cashBoxes.find(b => b.id === formData.cash_box_id);
+
             const movementData = {
                 user_id: user.id,
                 type,
                 amount: parseFloat(formData.monto),
                 date: formData.fecha,
-                description: type === 'expense' ? formData.descripcion : null,
-                company: type === 'expense' ? formData.responsable : formData.empresa,
-                account: type === 'income' ? formData.cuenta : null,
+                description: type === 'expense' ? formData.descripcion : (formData.descripcion || 'Cobro / Ingreso recibido'),
+                company: type === 'expense' ? (formData.responsable_name || 'Responsable') : (formData.empresa || 'Cliente'),
+                account: selectedBox ? selectedBox.name : (type === 'income' ? 'Mercado pago' : 'Caja'),
+                cash_box_id: formData.cash_box_id || null,
+                supplier_id: type === 'expense' && formData.supplier_id ? formData.supplier_id : null,
+                expense_responsible_id: type === 'expense' && formData.responsable_id ? formData.responsable_id : null,
             };
 
             const { data, error } = await supabase
                 .from('movements')
                 .insert([movementData])
-                .select();
+                .select('*, cash_boxes(name, type), suppliers(name), expense_responsibles(name)');
 
             if (error) throw error;
 
@@ -106,18 +167,17 @@ export default function MovementForm() {
             if (data && data[0]) {
                 setMovements(prev => [data[0], ...prev]);
             } else {
-                fetchRecentMovements();
+                fetchInitialData();
             }
 
-            // Reset form
-            setFormData({
-                responsable: '',
+            // Reset form fields while keeping box and responsible selections
+            setFormData(prev => ({
+                ...prev,
                 descripcion: '',
                 monto: '',
-                fecha: new Date().toISOString().split('T')[0],
                 empresa: '',
-                cuenta: 'Mercado pago',
-            });
+                fecha: new Date().toISOString().split('T')[0],
+            }));
         } catch (error) {
             console.error('Error saving movement:', error);
             toast.error('Error al guardar: ' + (error.message || 'Error de conexión'));
@@ -157,10 +217,14 @@ export default function MovementForm() {
 
     const filteredMovements = movements.filter(m => {
         const matchesType = filterType === 'all' || m.type === filterType;
+        const q = searchTerm.toLowerCase();
         const matchesSearch = 
-            (m.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (m.company || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (m.account || '').toLowerCase().includes(searchTerm.toLowerCase());
+            (m.description || '').toLowerCase().includes(q) ||
+            (m.company || '').toLowerCase().includes(q) ||
+            (m.account || '').toLowerCase().includes(q) ||
+            (m.suppliers?.name || '').toLowerCase().includes(q) ||
+            (m.expense_responsibles?.name || '').toLowerCase().includes(q) ||
+            (m.cash_boxes?.name || '').toLowerCase().includes(q);
         return matchesType && matchesSearch;
     });
 
@@ -234,36 +298,76 @@ export default function MovementForm() {
                     </div>
 
                     <form onSubmit={handleSubmit} className="styled-form">
+                        {/* Caja / Cuenta de Impacto */}
+                        <div className="form-field">
+                            <label><Wallet size={15} /> {type === 'expense' ? 'Caja / Cuenta de Salida' : 'Caja / Cuenta de Destino'}</label>
+                            <select 
+                                name="cash_box_id" 
+                                value={formData.cash_box_id} 
+                                onChange={handleChange}
+                                required
+                            >
+                                {cashBoxes.map((box) => (
+                                    <option key={box.id} value={box.id}>
+                                        {box.name} ({box.type === 'cash' ? 'Efectivo' : box.type === 'bank' ? 'Banco' : 'Digital'})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
                         {type === 'expense' ? (
                             <>
+                                {/* Responsable del Gasto */}
                                 <div className="form-field">
                                     <label><User size={15} /> Responsable del Gasto</label>
-                                    <input
-                                        type="text"
-                                        name="responsable"
-                                        value={formData.responsable}
+                                    <select 
+                                        name="responsable_id" 
+                                        value={formData.responsable_id} 
                                         onChange={handleChange}
                                         required
-                                        placeholder="Ej. Juan Pérez / Proveedor"
-                                    />
+                                    >
+                                        <option value="">Selecciona responsable...</option>
+                                        {responsibles.map((r) => (
+                                            <option key={r.id} value={r.id}>
+                                                {r.name} ({r.department || 'General'})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Proveedor */}
+                                <div className="form-field">
+                                    <label><Truck size={15} /> Proveedor Asignado</label>
+                                    <select 
+                                        name="supplier_id" 
+                                        value={formData.supplier_id} 
+                                        onChange={handleChange}
+                                    >
+                                        <option value="">Selecciona proveedor (Opcional)...</option>
+                                        {suppliers.map((s) => (
+                                            <option key={s.id} value={s.id}>
+                                                {s.name} {s.cuit ? `(${s.cuit})` : ''} - {s.category || 'Insumos'}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
 
                                 <div className="form-field">
-                                    <label><FileText size={15} /> Descripción del Gasto</label>
+                                    <label><FileText size={15} /> Descripción / Concepto del Gasto</label>
                                     <input
                                         type="text"
                                         name="descripcion"
                                         value={formData.descripcion}
                                         onChange={handleChange}
                                         required
-                                        placeholder="Ej. Servidores, Licencias, Viáticos"
+                                        placeholder="Ej. Servidores, Licencias, Viáticos, Cristales"
                                     />
                                 </div>
                             </>
                         ) : (
                             <>
                                 <div className="form-field">
-                                    <label><Building2 size={15} /> Empresa / Cliente Pagador</label>
+                                    <label><Building2 size={15} /> Cliente o Empresa Pagadora</label>
                                     <input
                                         type="text"
                                         name="empresa"
@@ -275,20 +379,21 @@ export default function MovementForm() {
                                 </div>
 
                                 <div className="form-field">
-                                    <label><CreditCard size={15} /> Cuenta de Destino</label>
-                                    <select name="cuenta" value={formData.cuenta} onChange={handleChange}>
-                                        <option value="Mercado pago">Mercado Pago</option>
-                                        <option value="Personal pay">Personal Pay</option>
-                                        <option value="Cuenta personal">Cuenta Bancaria Personal</option>
-                                        <option value="Efectivo">Efectivo / Caja Chica</option>
-                                    </select>
+                                    <label><FileText size={15} /> Concepto / Detalle del Cobro</label>
+                                    <input
+                                        type="text"
+                                        name="descripcion"
+                                        value={formData.descripcion}
+                                        onChange={handleChange}
+                                        placeholder="Ej. Cobro de servicios, Venta de módulos, Anticipo"
+                                    />
                                 </div>
                             </>
                         )}
 
                         <div className="form-row">
                             <div className="form-field">
-                                <label><Wallet size={15} /> Monto ($)</label>
+                                <label><DollarSign size={15} /> Monto ($)</label>
                                 <input
                                     type="number"
                                     name="monto"
@@ -338,7 +443,7 @@ export default function MovementForm() {
                             <Search size={16} className="search-icon" />
                             <input
                                 type="text"
-                                placeholder="Buscar por responsable, detalle..."
+                                placeholder="Buscar por responsable, proveedor, caja, detalle..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
@@ -380,6 +485,10 @@ export default function MovementForm() {
                         ) : (
                             filteredMovements.map((item) => {
                                 const isIncome = item.type === 'income';
+                                const boxName = item.cash_boxes?.name || item.account || 'Caja';
+                                const suppName = item.suppliers?.name;
+                                const respName = item.expense_responsibles?.name || item.company;
+
                                 return (
                                     <div key={item.id} className="ledger-item glass">
                                         <div className="ledger-item-left">
@@ -387,12 +496,24 @@ export default function MovementForm() {
                                                 {isIncome ? <PlusCircle size={18} /> : <MinusCircle size={18} />}
                                             </div>
                                             <div className="ledger-item-info">
-                                                <span className="ledger-primary-text">
-                                                    {item.company || 'Sin Asignar'}
-                                                </span>
-                                                <span className="ledger-secondary-text">
-                                                    {isIncome ? `Destino: ${item.account || '-'}` : item.description || 'Gasto operativo'}
-                                                </span>
+                                                <div className="ledger-top-line">
+                                                    <span className="ledger-primary-text">
+                                                        {isIncome ? (item.company || 'Cliente') : respName}
+                                                    </span>
+                                                    <span className="ledger-box-badge">
+                                                        {boxName}
+                                                    </span>
+                                                </div>
+                                                <div className="ledger-details-line">
+                                                    {suppName && (
+                                                        <span className="ledger-supp-tag">
+                                                            🚚 {suppName}
+                                                        </span>
+                                                    )}
+                                                    <span className="ledger-secondary-text">
+                                                        {item.description || (isIncome ? 'Ingreso registrado' : 'Gasto')}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
 
