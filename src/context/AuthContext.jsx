@@ -11,35 +11,45 @@ export function AuthProvider({ children }) {
 
     // --- SESSION SECURITY: SINGLE SESSION ---
     const syncSessionId = async (userId) => {
-        const newSessionId = crypto.randomUUID();
-        localStorage.setItem('lynx_session_id', newSessionId);
+        try {
+            const newSessionId = crypto.randomUUID();
+            localStorage.setItem('lynx_session_id', newSessionId);
 
-        await supabase
-            .from('profiles')
-            .update({ current_session_id: newSessionId })
-            .eq('id', userId);
+            await supabase
+                .from('profiles')
+                .update({ current_session_id: newSessionId })
+                .eq('id', userId);
 
-        return newSessionId;
+            return newSessionId;
+        } catch (err) {
+            console.error('Session sync error:', err);
+            return null;
+        }
     };
 
     const verifySessionId = async (userId) => {
         if (!userId) return true;
 
-        const localSessionId = localStorage.getItem('lynx_session_id');
-        const { data, error } = await supabase
-            .from('profiles')
-            .select('current_session_id')
-            .eq('id', userId)
-            .single();
+        try {
+            const localSessionId = localStorage.getItem('lynx_session_id');
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('current_session_id')
+                .eq('id', userId)
+                .single();
 
-        if (error || !data) return true;
+            if (error || !data) return true;
 
-        if (data.current_session_id && data.current_session_id !== localSessionId) {
-            setAuthError('Se ha iniciado sesión en otro dispositivo. Se ha cerrado esta sesión.');
-            await logout();
-            return false;
+            if (data.current_session_id && data.current_session_id !== localSessionId) {
+                setAuthError('Se ha iniciado sesión en otro dispositivo. Se ha cerrado esta sesión.');
+                await logout();
+                return false;
+            }
+            return true;
+        } catch (err) {
+            console.error('Verify session error:', err);
+            return true;
         }
-        return true;
     };
 
     // --- SESSION SECURITY: INACTIVITY ---
@@ -81,19 +91,39 @@ export function AuthProvider({ children }) {
     useEffect(() => {
         // Check active sessions and subscribe to auth changes
         const initSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            await checkUserApproval(session?.user);
-            setLoading(false);
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session?.user) {
+                    await checkUserApproval(session.user);
+                } else {
+                    setUser(null);
+                }
+            } catch (err) {
+                console.error('Init session error:', err);
+                setUser(null);
+            } finally {
+                setLoading(false);
+            }
         };
 
         initSession();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            await checkUserApproval(session?.user);
-            setLoading(false);
+            try {
+                if (session?.user) {
+                    await checkUserApproval(session.user);
+                } else {
+                    setUser(null);
+                }
+            } catch (err) {
+                console.error('Auth state change error:', err);
+                setUser(null);
+            } finally {
+                setLoading(false);
+            }
         });
 
-        return () => subscription.unsubscribe();
+        return () => subscription?.unsubscribe();
     }, []);
 
     const checkUserApproval = async (currentUser) => {
@@ -112,15 +142,13 @@ export function AuthProvider({ children }) {
 
             if (error) {
                 console.error('Error fetching profile:', error);
-                // PGRST116 is 'no rows found'
                 if (error.code === 'PGRST116') {
-                    setAuthError('Tu perfil no existe. Regístrate de nuevo o contacta al administrador.');
+                    setAuthError('Tu perfil no existe aún en la base de datos.');
                 } else {
-                    setAuthError('Error de servidor al verificar aprobación. Prueba de nuevo.');
+                    setAuthError('Error de servidor al verificar aprobación.');
                 }
                 await supabase.auth.signOut();
                 setUser(null);
-                setLoading(false);
                 return;
             }
 
@@ -133,33 +161,26 @@ export function AuthProvider({ children }) {
                 }
 
                 setUser(currentUser);
-                setLoading(false);
             } else {
                 setAuthError('Tu cuenta está pendiente de aprobación por el administrador.');
                 await supabase.auth.signOut();
                 setUser(null);
-                setLoading(false);
             }
         } catch (err) {
             console.error('Auth check error:', err);
             setAuthError('Error de autenticación inesperado.');
             setUser(null);
-            setLoading(false);
         }
     };
 
     const login = async (email, password) => {
-        // Standard Supabase login
         const { data, error } = await supabase.auth.signInWithPassword({
             email,
             password,
         });
         if (error) throw error;
 
-        // The onAuthStateChange will trigger checkUserApproval automatically,
-        // but we can do a quick check here if needed.
         if (data.user) {
-            // New login always generates a new session and kicks others out
             await syncSessionId(data.user.id);
             await checkUserApproval(data.user);
         }
@@ -168,15 +189,45 @@ export function AuthProvider({ children }) {
     };
 
     const logout = async () => {
-        const { error } = await supabase.auth.signOut();
-        localStorage.removeItem('lynx_session_id');
-        setUser(null);
-        if (error) throw error;
+        try {
+            await supabase.auth.signOut();
+        } catch (err) {
+            console.error('Sign out error:', err);
+        } finally {
+            localStorage.removeItem('lynx_session_id');
+            setUser(null);
+        }
     };
 
     return (
         <AuthContext.Provider value={{ user, login, logout, loading, authError, setAuthError }}>
-            {!loading && children}
+            {loading ? (
+                <div style={{
+                    minHeight: '100vh',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'column',
+                    gap: '1.25rem',
+                    backgroundColor: '#070B14',
+                    color: '#F8FAFC',
+                    fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif"
+                }}>
+                    <div style={{
+                        width: '44px',
+                        height: '44px',
+                        border: '3px solid rgba(245, 158, 11, 0.15)',
+                        borderTopColor: '#F59E0B',
+                        borderRadius: '50%',
+                        animation: 'authSpin 0.8s linear infinite',
+                        boxShadow: '0 0 15px rgba(245, 158, 11, 0.2)'
+                    }} />
+                    <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#94A3B8', letterSpacing: '0.05em' }}>
+                        CARGANDO LYNX GESTIÓN...
+                    </span>
+                    <style>{`@keyframes authSpin { to { transform: rotate(360deg); } }`}</style>
+                </div>
+            ) : children}
         </AuthContext.Provider>
     );
 }
