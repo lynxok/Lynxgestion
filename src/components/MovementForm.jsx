@@ -16,7 +16,8 @@ import {
     CreditCard, 
     FileText,
     Truck,
-    Building
+    Building,
+    DollarSign
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
