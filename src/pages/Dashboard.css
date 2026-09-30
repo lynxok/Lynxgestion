@@ -1,48 +1,112 @@
-.dashboard {
-    min-height: 100vh;
+.dashboard-layout {
     display: flex;
+    min-height: 100vh;
+    background-color: var(--color-bg-base);
 }
 
 .main-content {
     flex: 1;
-    margin-left: 0;
-    /* Changed dynamically if needed, but sidebar is drawer style by default on mobile, or pushed? */
-    margin-left: 0;
-    /* Mobile default */
-    min-height: 100vh;
+    margin-left: 270px;
     display: flex;
     flex-direction: column;
-    transition: margin-left 0.3s;
+    min-height: 100vh;
+    box-sizing: border-box;
+    width: calc(100% - 270px);
 }
 
-/* On desktop, maybe we want sidebar always visible?
-   User said "menu desplegable al costado del que tiene las tres rallitas" which usually means off-canvas.
-   But typically for dashboard, it might be persistent on large screens.
-   For now, I'll keep it as an overlay drawer for simplicity relative to the "hamburger" request, or I can make it push content.
-*/
-
-.dashboard-header {
-    padding: 1.5rem 2rem;
+.dashboard-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    padding: 1.25rem 2rem;
     display: flex;
     align-items: center;
-    /* padding-left: 4rem; Space for the toggle button */
-    padding-left: 5rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    justify-content: space-between;
+    border-bottom: 1px solid var(--color-border);
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    background: rgba(7, 11, 20, 0.85);
+    backdrop-filter: blur(16px);
 }
 
-.dashboard-header h1 {
-    margin: 0;
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--color-text);
+.topbar-left {
+    display: flex;
+    align-items: center;
 }
 
-.content-area {
-    flex: 1;
+.tab-title-group {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.tab-icon-wrapper {
+    width: 44px;
+    height: 44px;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.05) 100%);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: var(--radius-md);
+    color: var(--color-accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.tab-title-group h1 {
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--color-text-main);
+}
+
+.tab-subtitle {
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+    margin-top: 0.15rem;
+}
+
+.date-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.9rem;
+    border-radius: var(--radius-full);
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--color-border);
+}
+
+.date-badge span {
+    color: var(--color-text-main);
+}
+
+.content-container {
     padding: 2rem;
-    overflow-y: auto;
+    flex: 1;
+    max-width: 1400px;
+    width: 100%;
+    margin: 0 auto;
+    box-sizing: border-box;
 }
 
-@media (min-width: 768px) {
-    /* If we wanted persistent sidebar on desktop */
+@media (max-width: 900px) {
+    .main-content {
+        margin-left: 0;
+        width: 100%;
+    }
+    
+    .dashboard-topbar {
+        padding: 1rem 1rem 1rem 4rem;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+    
+    .content-container {
+        padding: 1.25rem 1rem;
+    }
 }

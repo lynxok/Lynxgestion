@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { User, Lock, ArrowRight, Mail, UserPlus } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
+import { Lock, ArrowRight, Mail, UserPlus, Eye, EyeOff, ShieldCheck, Sparkles } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import './Login.css';
 
@@ -8,140 +9,154 @@ export default function Login() {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const { login, authError, setAuthError } = useAuth();
+    const { toast } = useToast();
     const [localError, setLocalError] = useState('');
-    const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLocalError('');
-        setMessage('');
-        setAuthError(null); // Clear authError on new submission
+        setAuthError(null);
         setLoading(true);
 
         try {
             if (isLogin) {
                 await login(email, password);
+                toast.success('¡Bienvenido al sistema LYNX Gestión!');
             } else {
-                // Sign Up Logic
                 const { data, error } = await supabase.auth.signUp({
                     email,
                     password,
                 });
                 if (error) throw error;
-                setMessage('Cuenta creada exitosamente. ¡Bienvenido!');
-                // Auto login is usually handled by Supabase unless email confirmation is required
+                toast.success('Cuenta registrada correctamente. Iniciando sesión...');
             }
         } catch (err) {
             console.error(err);
-            if (err.message.includes('Invalid login credentials')) {
-                setLocalError('Credenciales inválidas. Verifica tu correo y contraseña.');
-            } else if (err.message.includes('User already registered')) {
-                setLocalError('Este correo ya está registrado.');
+            if (err.message?.includes('Invalid login credentials')) {
+                setLocalError('Credenciales incorrectas. Verifica tu correo y contraseña.');
+            } else if (err.message?.includes('User already registered')) {
+                setLocalError('Este correo electrónico ya se encuentra registrado.');
             } else {
-                setLocalError('Error: ' + err.message);
+                setLocalError('Error: ' + (err.message || 'Error de autenticación'));
             }
         } finally {
             setLoading(false);
         }
     };
 
-    const handleForgotPassword = () => {
-        alert('Funcionalidad de recupero de contraseña en desarrollo.');
-    };
-
     return (
-        <div className="login-container">
-            <div className="login-card glass slide-up">
-                <div className="login-header">
-                    <h2 className="title">
-                        <span className="highlight">LYNX</span> {isLogin ? 'Ingreso' : 'Registro'}
-                    </h2>
-                    <p className="subtitle">
-                        {isLogin ? 'Ingresa tus credenciales para continuar' : 'Crea una cuenta para comenzar'}
+        <div className="login-wrapper">
+            <div className="login-backdrop-glow"></div>
+
+            <div className="login-box glass slide-up">
+                {/* Brand Header */}
+                <div className="login-brand-header">
+                    <div className="brand-badge">
+                        <img src="./favicon.png" alt="LYNX" className="brand-login-logo" />
+                    </div>
+                    <h1 className="login-brand-title">
+                        LYNX <span className="highlight-text">GESTIÓN</span>
+                    </h1>
+                    <p className="login-brand-desc">
+                        {isLogin 
+                            ? 'Ingresa tus credenciales para acceder al panel' 
+                            : 'Crea tu usuario para comenzar a operar'}
                     </p>
                 </div>
 
+                {/* Auth Mode Tabs */}
+                <div className="auth-tab-pill">
+                    <button
+                        type="button"
+                        className={`tab-toggle ${isLogin ? 'active' : ''}`}
+                        onClick={() => {
+                            setIsLogin(true);
+                            setLocalError('');
+                        }}
+                    >
+                        Iniciar Sesión
+                    </button>
+                    <button
+                        type="button"
+                        className={`tab-toggle ${!isLogin ? 'active' : ''}`}
+                        onClick={() => {
+                            setIsLogin(false);
+                            setLocalError('');
+                        }}
+                    >
+                        Registrarse
+                    </button>
+                </div>
+
+                {/* Error Banner */}
                 {(localError || authError) && (
-                    <div className="error-message glass">
-                        {localError || authError}
+                    <div className="login-error-banner fade-in">
+                        <span>{localError || authError}</span>
                     </div>
                 )}
-                {message && <div className="success-message">{message}</div>}
 
-                <form className="form-stack" onSubmit={handleSubmit}>
-                    <div className="fields-stack">
-                        <div className="input-group">
-                            <div className="icon-wrapper">
-                                <Mail className="icon" />
-                            </div>
+                {/* Form */}
+                <form className="login-form-stack" onSubmit={handleSubmit}>
+                    <div className="input-field-group">
+                        <label className="field-label">Correo Electrónico</label>
+                        <div className="input-icon-wrap">
+                            <Mail className="field-icon" size={18} />
                             <input
                                 id="email"
                                 name="email"
                                 type="email"
                                 required
-                                className="input-field"
-                                placeholder="Correo Electrónico"
+                                className="styled-login-input"
+                                placeholder="tu_correo@lynx.com.ar"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                             />
                         </div>
-                        <div className="input-group">
-                            <div className="icon-wrapper">
-                                <Lock className="icon" />
-                            </div>
+                    </div>
+
+                    <div className="input-field-group">
+                        <label className="field-label">Contraseña</label>
+                        <div className="input-icon-wrap">
+                            <Lock className="field-icon" size={18} />
                             <input
                                 id="password"
                                 name="password"
-                                type="password"
+                                type={showPassword ? 'text' : 'password'}
                                 required
-                                className="input-field"
-                                placeholder="Contraseña"
+                                className="styled-login-input"
+                                placeholder="••••••••"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 minLength={6}
                             />
-                        </div>
-                    </div>
-
-                    {isLogin && (
-                        <div className="forgot-password">
-                            <button type="button" onClick={handleForgotPassword} className="link-btn">
-                                ¿Olvidaste tu contraseña?
+                            <button
+                                type="button"
+                                className="pwd-toggle-btn"
+                                onClick={() => setShowPassword(!showPassword)}
+                                aria-label="Mostrar contraseña"
+                            >
+                                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                             </button>
                         </div>
-                    )}
-
-                    <div className="form-actions">
-                        <button
-                            type="submit"
-                            className="btn btn-primary"
-                            disabled={loading}
-                        >
-                            <span className="btn-icon">
-                                {isLogin ? <ArrowRight size={20} /> : <UserPlus size={20} />}
-                            </span>
-                            {loading
-                                ? 'Procesando...'
-                                : (isLogin ? 'Ingresar' : 'Crear Cuenta')}
-                        </button>
                     </div>
 
-                    <div className="toggle-mode">
-                        <button
-                            type="button"
-                            className="link-btn switch-mode"
-                            onClick={() => {
-                                setIsLogin(!isLogin);
-                                setLocalError('');
-                                setMessage('');
-                            }}
-                        >
-                            {isLogin ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Inicia Sesión'}
-                        </button>
-                    </div>
+                    <button
+                        type="submit"
+                        className="login-submit-btn"
+                        disabled={loading}
+                    >
+                        <span>{loading ? 'Verificando...' : (isLogin ? 'Acceder al Panel' : 'Crear Cuenta')}</span>
+                        {isLogin ? <ArrowRight size={18} /> : <UserPlus size={18} />}
+                    </button>
                 </form>
+
+                <div className="login-footer-security">
+                    <ShieldCheck size={14} className="sec-icon" />
+                    <span>Conexión segura cifrada con Supabase & RLS</span>
+                </div>
             </div>
         </div>
     );

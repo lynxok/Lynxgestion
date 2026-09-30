@@ -1,309 +1,571 @@
 .projects-container {
-    padding: 1rem;
-    height: 100%;
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
 }
 
-.projects-header {
+.projects-top-controls {
     display: flex;
-    justify-content: flex-end;
-}
-
-.projects-layout {
-    display: grid;
-    grid-template-columns: 350px 1fr;
-    gap: 1.5rem;
-    flex: 1;
-    min-height: 0;
-}
-
-.panel-title {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 1.5rem;
-    color: var(--text-primary);
-    font-size: 1.1rem;
-}
-
-/* Projects List Panel */
-.projects-list-panel {
-    padding: 1.5rem;
-    overflow-y: auto;
-    border: 1px solid var(--glass-border);
-}
-
-.project-items {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-}
-
-.project-item {
-    padding: 1rem;
-    cursor: pointer;
-    display: flex;
+    gap: 1rem;
     align-items: center;
     justify-content: space-between;
-    transition: all 0.3s ease;
-    border: 1px solid transparent;
+    flex-wrap: wrap;
 }
 
-.project-item:hover {
-    background: var(--glass-highlight);
-    transform: translateX(5px);
-}
-
-.project-item.active {
-    background: var(--glass-highlight);
-    border-color: var(--accent-primary);
-}
-
-.project-info h4 {
-    margin: 0 0 0.5rem 0;
-    font-size: 0.95rem;
-}
-
-.progress-mini {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-}
-
-.progress-bar-bg {
+.projects-search-bar {
     flex: 1;
-    height: 4px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 2px;
-    overflow: hidden;
-    width: 100px;
-}
-
-.progress-bar-fill {
-    height: 100%;
-    background: var(--accent-primary);
-    border-radius: 2px;
-    transition: width 0.5s ease;
-}
-
-/* Detail Panel */
-.project-detail-panel {
-    padding: 2rem;
-    overflow-y: auto;
-    border: 1px solid var(--glass-border);
-}
-
-.details-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-}
-
-.details-header h2 {
-    font-size: 1.8rem;
-    color: var(--accent-primary);
-}
-
-.header-title-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    flex: 1;
-}
-
-.project-progress-main {
-    display: flex;
-    align-items: center;
-    gap: 1.5rem;
-    margin-top: 0.5rem;
-}
-
-.progress-bar-container {
-    flex: 1;
-    max-width: 400px;
-    height: 12px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    overflow: hidden;
+    min-width: 280px;
+    max-width: 480px;
     position: relative;
-    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.progress-bar-fill-large {
-    height: 100%;
-    background: linear-gradient(90deg, var(--accent-primary), #ffb347);
-    border-radius: 6px;
-    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
-    box-shadow: 0 0 15px rgba(var(--accent-primary-rgb), 0.3);
-}
-
-.progress-bar-fill-large::after {
-    content: '';
+.projects-search-bar .search-icon {
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(90deg,
-            transparent,
-            rgba(255, 255, 255, 0.2),
-            transparent);
-    animation: shine 2s infinite;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-text-subtle);
 }
 
-@keyframes shine {
-    0% {
-        transform: translateX(-100%);
-    }
-
-    100% {
-        transform: translateX(100%);
-    }
+.projects-search-bar input {
+    padding-left: 2.75rem;
 }
 
-.progress-percentage {
-    font-size: 1.25rem;
+.btn-action-main {
+    padding: 0.75rem 1.25rem;
+    border-radius: var(--radius-md);
     font-weight: 700;
-    color: var(--accent-primary);
-    min-width: 60px;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
-.metadata-grid {
+.btn-new {
+    background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+    color: #0F172A;
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
+}
+
+.btn-new:hover {
+    background: linear-gradient(135deg, #FBBF24 0%, #F59E0B 100%);
+    transform: translateY(-1px);
+}
+
+.btn-cancel {
+    background: rgba(239, 68, 68, 0.15);
+    color: #F87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* Project Creation Card */
+.project-create-card {
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-accent-glow);
+    background: rgba(15, 23, 42, 0.9);
+}
+
+.project-create-card .card-header h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.15rem;
+}
+
+.header-icon {
+    color: var(--color-accent);
+}
+
+.project-create-card .card-header p {
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+    margin-top: 0.2rem;
+    margin-bottom: 1.25rem;
+}
+
+.create-project-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.form-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
-    margin-bottom: 2.5rem;
 }
 
-.meta-item {
-    padding: 1.25rem;
-    display: flex;
-    gap: 1rem;
-    border: 1px solid var(--glass-border);
+@media (max-width: 768px) {
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
-.meta-item label {
-    display: block;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    color: var(--text-secondary);
-    margin-bottom: 0.25rem;
-}
-
-.meta-item p {
-    margin: 0;
-    line-height: 1.4;
-}
-
-/* Stages */
-.stages-section {
+.form-group {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 0.4rem;
 }
 
-.section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--glass-border);
-}
-
-.overall-progress {
+.form-group label {
+    font-size: 0.82rem;
     font-weight: 600;
-    color: var(--accent-primary);
+    color: var(--color-text-muted);
 }
 
-.stages-list {
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.5rem;
+}
+
+/* Master-Detail Layout */
+.projects-grid-layout {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 1.5rem;
+    align-items: start;
+}
+
+@media (max-width: 1024px) {
+    .projects-grid-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+.projects-list-column {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.25rem;
+    min-height: 500px;
+}
+
+.column-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.column-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.projects-items-stack {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+    max-height: 600px;
+    overflow-y: auto;
+    padding-right: 0.25rem;
 }
 
-.stage-item {
+.project-card-item {
     padding: 1rem;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    border: 1px solid var(--glass-border);
-}
-
-.stage-item.done {
-    opacity: 0.7;
-}
-
-.stage-item.done h4 {
-    text-decoration: line-through;
-    color: var(--text-secondary);
-}
-
-.status-toggle {
-    background: none;
-    border: none;
+    border-radius: var(--radius-md);
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--color-border);
     cursor: pointer;
-    padding: 0;
-    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    transition: all 0.2s ease;
 }
 
-.stage-info h4 {
-    margin: 0 0 0.25rem 0;
+.project-card-item:hover {
+    background: rgba(30, 41, 59, 0.6);
+    border-color: rgba(255, 255, 255, 0.15);
+    transform: translateY(-1px);
 }
 
-.stage-dates {
+.project-card-item.selected {
+    background: rgba(30, 41, 59, 0.8);
+    border-color: var(--color-accent);
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.15);
+}
+
+.project-card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.project-card-top h4 {
+    font-size: 0.95rem;
+    color: var(--color-text-main);
+    line-height: 1.3;
+}
+
+.project-prog-badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    padding: 0.15rem 0.45rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid currentColor;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.project-card-progress-bar {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    border-radius: var(--radius-full);
+    transition: width 0.3s ease;
+}
+
+.project-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--color-text-subtle);
+}
+
+.project-audience {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.chevron-icon {
+    color: var(--color-text-subtle);
+    transition: transform 0.2s ease;
+}
+
+.project-card-item.selected .chevron-icon {
+    transform: translateX(3px);
+    color: var(--color-accent);
+}
+
+/* Detail Column */
+.project-detail-column {
+    padding: 1.5rem;
+    min-height: 500px;
+}
+
+.detail-header-card {
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.detail-header-main {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.detail-header-main h2 {
+    font-size: 1.4rem;
+    margin-top: 0.4rem;
+}
+
+.btn-delete-project {
+    padding: 0.5rem 0.85rem;
+    background: rgba(239, 68, 68, 0.1);
+    color: #F87171;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: var(--radius-md);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.btn-delete-project:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #FFFFFF;
+}
+
+.detail-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.meta-box {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.meta-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-text-subtle);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    text-transform: uppercase;
+}
+
+.meta-value {
+    font-size: 0.9rem;
+    color: var(--color-text-main);
+}
+
+.detail-progress-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.prog-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+    font-weight: 600;
+}
+
+.prog-percent {
+    color: var(--color-text-main);
+    font-family: var(--font-mono);
+    font-weight: 700;
+}
+
+.prog-track {
+    height: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.prog-bar {
+    height: 100%;
+    border-radius: var(--radius-full);
+    transition: width 0.4s ease;
+}
+
+/* Stages */
+.stages-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.stages-section-header h3 {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
+    font-size: 1.05rem;
 }
 
-/* Add Stage Form */
 .add-stage-form {
-    margin-top: 1.5rem;
-    padding: 1.5rem;
-    background: rgba(var(--accent-primary-rgb), 0.05);
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid var(--color-border);
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 0.75rem;
+    align-items: center;
 }
 
-.add-stage-form h4 {
-    margin: 0 0 1rem 0;
+@media (max-width: 768px) {
+    .add-stage-form {
+        grid-template-columns: 1fr;
+    }
 }
 
-.form-row {
-    display: flex;
-    gap: 1rem;
-    align-items: flex-end;
-}
-
-.form-row>input {
-    flex: 2;
-}
-
-.date-inputs {
+.stage-dates-group {
     display: flex;
     gap: 0.5rem;
-    flex: 1;
 }
 
-.empty-state {
-    height: 100%;
+.date-input-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.date-input-wrap .date-label {
+    font-size: 0.7rem;
+    color: var(--color-text-subtle);
+    font-weight: 600;
+}
+
+.date-input-wrap input {
+    padding: 0.55rem 0.75rem;
+    font-size: 0.82rem;
+}
+
+.btn-add-stage {
+    background: var(--color-accent);
+    color: #0F172A;
+    padding: 0.65rem 1rem;
+    font-weight: 700;
+    font-size: 0.85rem;
+    border-radius: var(--radius-md);
+    align-self: flex-end;
+}
+
+.btn-add-stage:hover {
+    background: #FBBF24;
+}
+
+.stages-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.stage-item-card {
+    padding: 0.85rem 1.1rem;
+    border-radius: var(--radius-md);
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.2s ease;
+}
+
+.stage-item-card:hover {
+    background: rgba(30, 41, 59, 0.5);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.stage-item-card.is-done {
+    border-left: 3px solid #10B981;
+}
+
+.stage-item-card.is-in-progress {
+    border-left: 3px solid #3B82F6;
+}
+
+.stage-left-block {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+}
+
+.stage-status-toggle {
+    background: transparent;
+    border: none;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.status-icon-done {
+    color: #10B981;
+}
+
+.status-icon-progress {
+    color: #3B82F6;
+}
+
+.status-icon-pending {
+    color: var(--color-text-subtle);
+}
+
+.stage-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.stage-title {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--color-text-main);
+}
+
+.completed-text {
+    text-decoration: line-through;
+    color: var(--color-text-subtle);
+}
+
+.stage-dates-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    color: var(--color-text-subtle);
+    font-family: var(--font-mono);
+}
+
+.stage-right-block {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.stage-pill {
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.25rem 0.6rem;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    user-select: none;
+}
+
+.stage-pill.completed, .stage-pill.done {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34D399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.stage-pill.in_progress {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60A5FA;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.stage-pill.pending {
+    background: rgba(148, 163, 184, 0.1);
+    color: #94A3B8;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.btn-trash-stage {
+    background: transparent;
+    border: none;
+    color: var(--color-text-subtle);
+    padding: 0.3rem;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+}
+
+.btn-trash-stage:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #EF4444;
+}
+
+.empty-stages, .empty-selection-state {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 1rem;
-    color: var(--text-secondary);
-    opacity: 0.5;
-}
-
-@media (max-width: 1024px) {
-    .projects-layout {
-        grid-template-columns: 1fr;
-    }
+    padding: 3rem 1rem;
+    gap: 0.75rem;
+    text-align: center;
+    color: var(--color-text-subtle);
 }

@@ -1,25 +1,46 @@
 import { useState, useEffect } from 'react';
-import { Plus, ListTodo, Target, Users, Calendar, ChevronRight, Save, Trash2, CheckCircle2, Clock } from 'lucide-react';
+import { 
+    Plus, 
+    ListTodo, 
+    Target, 
+    Users, 
+    Calendar, 
+    ChevronRight, 
+    Save, 
+    Trash2, 
+    CheckCircle2, 
+    Clock, 
+    Search, 
+    FolderKanban, 
+    AlertCircle, 
+    Layers, 
+    PlayCircle 
+} from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import './Projects.css';
 
 export default function Projects() {
     const { user } = useAuth();
+    const { toast } = useToast();
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isCreating, setIsCreating] = useState(false);
     const [selectedProject, setSelectedProject] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
+
     const [formData, setFormData] = useState({
         name: '',
         objective: '',
         target_audience: '',
         progress: 0
     });
+
     const [stages, setStages] = useState([]);
     const [newStage, setNewStage] = useState({
         name: '',
-        start_date: '',
+        start_date: new Date().toISOString().split('T')[0],
         end_date: '',
         status: 'pending'
     });
@@ -38,29 +59,38 @@ export default function Projects() {
 
             if (error) throw error;
             setProjects(data || []);
+            if (data && data.length > 0 && !selectedProject) {
+                setSelectedProject(data[0]);
+                fetchStages(data[0].id);
+            }
         } catch (error) {
             console.error('Error fetching projects:', error);
+            toast.error('Error al cargar proyectos');
         } finally {
             setLoading(false);
         }
     };
 
     const fetchStages = async (projectId) => {
-        const { data, error } = await supabase
-            .from('project_stages')
-            .select('*')
-            .eq('project_id', projectId)
-            .order('start_date', { ascending: true });
+        try {
+            const { data, error } = await supabase
+                .from('project_stages')
+                .select('*')
+                .eq('project_id', projectId)
+                .order('start_date', { ascending: true });
 
-        if (!error) setStages(data);
+            if (error) throw error;
+            setStages(data || []);
+        } catch (error) {
+            console.error('Error fetching stages:', error);
+        }
     };
 
     const handleCreateProject = async (e) => {
         e.preventDefault();
-        console.log('Attempting to create project:', formData);
 
         if (!user || !user.id) {
-            alert('Error: No se encontró sesión de usuario. Intenta cerrar sesión y volver a entrar.');
+            toast.error('Error de sesión. Intenta cerrar sesión y volver a entrar.');
             return;
         }
 
@@ -71,270 +101,472 @@ export default function Projects() {
                     name: formData.name,
                     objective: formData.objective,
                     target_audience: formData.target_audience,
-                    progress: formData.progress,
+                    progress: parseInt(formData.progress) || 0,
                     user_id: user.id
                 }])
                 .select();
 
-            if (error) {
-                console.error('Supabase Error:', error);
-                throw error;
-            }
+            if (error) throw error;
 
-            console.log('Project created successfully:', data);
+            toast.success('Proyecto creado exitosamente');
             if (data && data[0]) {
                 setProjects([data[0], ...projects]);
+                setSelectedProject(data[0]);
+                fetchStages(data[0].id);
             } else {
-                await fetchProjects(); // Backup if select somehow fails
+                await fetchProjects();
             }
 
             setIsCreating(false);
             setFormData({ name: '', objective: '', target_audience: '', progress: 0 });
         } catch (error) {
-            console.error('Full Error Object:', error);
-            alert('Error al crear proyecto: ' + (error.message || 'Error desconocido'));
+            console.error('Error creating project:', error);
+            toast.error('Error al crear proyecto: ' + (error.message || 'Error inesperado'));
         }
     };
 
     const handleAddStage = async (e) => {
         e.preventDefault();
+        if (!selectedProject) return;
+
         try {
             const { data, error } = await supabase
                 .from('project_stages')
-                .insert([{ ...newStage, project_id: selectedProject.id }])
+                .insert([{
+                    name: newStage.name,
+                    start_date: newStage.start_date,
+                    end_date: newStage.end_date,
+                    status: newStage.status,
+                    project_id: selectedProject.id
+                }])
                 .select();
 
             if (error) throw error;
-            setStages([...stages, data[0]]);
-            setNewStage({ name: '', start_date: '', end_date: '', status: 'pending' });
-            updateProjectProgress(selectedProject.id);
+
+            toast.success('Etapa agregada correctamente');
+            const updatedStages = [...stages, data[0]];
+            setStages(updatedStages);
+            setNewStage({ 
+                name: '', 
+                start_date: new Date().toISOString().split('T')[0], 
+                end_date: '', 
+                status: 'pending' 
+            });
+
+            updateProjectProgress(selectedProject.id, updatedStages);
         } catch (error) {
-            alert('Error al agregar etapa: ' + error.message);
+            console.error('Error adding stage:', error);
+            toast.error('Error al agregar etapa: ' + error.message);
         }
     };
 
     const toggleStageStatus = async (stage) => {
-        const newStatus = stage.status === 'done' ? 'pending' : 'done';
-        const { error } = await supabase
-            .from('project_stages')
-            .update({ status: newStatus })
-            .eq('id', stage.id);
+        // Cycle: pending -> in_progress -> completed -> pending
+        let nextStatus = 'in_progress';
+        if (stage.status === 'in_progress') nextStatus = 'completed';
+        else if (stage.status === 'completed' || stage.status === 'done') nextStatus = 'pending';
 
-        if (!error) {
-            setStages(stages.map(s => s.id === stage.id ? { ...s, status: newStatus } : s));
-            updateProjectProgress(selectedProject.id);
+        try {
+            const { error } = await supabase
+                .from('project_stages')
+                .update({ status: nextStatus })
+                .eq('id', stage.id);
+
+            if (error) throw error;
+
+            const updatedStages = stages.map(s => s.id === stage.id ? { ...s, status: nextStatus } : s);
+            setStages(updatedStages);
+            updateProjectProgress(selectedProject.id, updatedStages);
+        } catch (error) {
+            console.error('Error updating stage:', error);
+            toast.error('Error al actualizar estado');
         }
     };
 
-    const updateProjectProgress = async (projectId) => {
-        // Simple logic: % of completed stages
-        const { data: currentStages } = await supabase
-            .from('project_stages')
-            .select('status')
-            .eq('project_id', projectId);
+    const deleteStage = async (stageId) => {
+        if (!window.confirm('¿Eliminar esta etapa del proyecto?')) return;
 
-        if (currentStages && currentStages.length > 0) {
-            const completed = currentStages.filter(s => s.status === 'done').length;
-            const progress = Math.round((completed / currentStages.length) * 100);
+        try {
+            const { error } = await supabase
+                .from('project_stages')
+                .delete()
+                .eq('id', stageId);
 
-            await supabase
-                .from('projects')
-                .update({ progress })
-                .eq('id', projectId);
+            if (error) throw error;
 
-            setProjects(projects.map(p => p.id === projectId ? { ...p, progress } : p));
-            if (selectedProject?.id === projectId) {
-                setSelectedProject({ ...selectedProject, progress });
-            }
+            toast.info('Etapa eliminada');
+            const updatedStages = stages.filter(s => s.id !== stageId);
+            setStages(updatedStages);
+            updateProjectProgress(selectedProject.id, updatedStages);
+        } catch (error) {
+            console.error('Error deleting stage:', error);
+            toast.error('No se pudo eliminar la etapa');
+        }
+    };
+
+    const updateProjectProgress = async (projectId, currentStagesList) => {
+        if (!currentStagesList || currentStagesList.length === 0) return;
+
+        const completedCount = currentStagesList.filter(s => s.status === 'completed' || s.status === 'done').length;
+        const inProgressCount = currentStagesList.filter(s => s.status === 'in_progress').length;
+        
+        // Progress weight: completed = 100%, in_progress = 50%
+        const score = (completedCount * 1.0) + (inProgressCount * 0.5);
+        const progress = Math.min(100, Math.round((score / currentStagesList.length) * 100));
+
+        await supabase
+            .from('projects')
+            .update({ progress })
+            .eq('id', projectId);
+
+        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, progress } : p));
+        if (selectedProject?.id === projectId) {
+            setSelectedProject(prev => ({ ...prev, progress }));
         }
     };
 
     const deleteProject = async (id) => {
-        if (!confirm('¿Estás seguro de eliminar este proyecto y todas sus etapas?')) return;
-        const { error } = await supabase.from('projects').delete().eq('id', id);
-        if (!error) {
-            setProjects(projects.filter(p => p.id !== id));
-            setSelectedProject(null);
+        if (!window.confirm('¿Estás seguro de eliminar este proyecto y todas sus etapas vinculadas?')) return;
+        
+        try {
+            const { error } = await supabase.from('projects').delete().eq('id', id);
+            if (error) throw error;
+
+            toast.info('Proyecto eliminado');
+            const remaining = projects.filter(p => p.id !== id);
+            setProjects(remaining);
+            if (remaining.length > 0) {
+                setSelectedProject(remaining[0]);
+                fetchStages(remaining[0].id);
+            } else {
+                setSelectedProject(null);
+                setStages([]);
+            }
+        } catch (error) {
+            console.error('Error deleting project:', error);
+            toast.error('Error al eliminar proyecto');
         }
     };
 
-    if (loading) return <div className="loading">Cargando proyectos...</div>;
+    const filteredProjects = projects.filter(p => 
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.target_audience || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.objective || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const getProgressColor = (val) => {
+        if (val >= 100) return '#10B981';
+        if (val >= 50) return '#F59E0B';
+        return '#3B82F6';
+    };
 
     return (
         <div className="projects-container fade-in">
-            <div className="projects-header">
+            {/* Header & Controls */}
+            <div className="projects-top-controls">
+                <div className="projects-search-bar">
+                    <Search size={16} className="search-icon" />
+                    <input
+                        type="text"
+                        placeholder="Buscar proyectos por nombre, público, meta..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+
                 <button
-                    className={`btn ${isCreating ? 'btn-secondary' : 'btn-primary'}`}
+                    className={`btn-action-main ${isCreating ? 'btn-cancel' : 'btn-new'}`}
                     onClick={() => {
                         setIsCreating(!isCreating);
-                        setSelectedProject(null);
                     }}
                 >
-                    {isCreating ? 'Cancelar' : <><Plus size={20} /> Nuevo Proyecto</>}
+                    {isCreating ? 'Cancelar' : <><Plus size={18} /> Nuevo Proyecto</>}
                 </button>
             </div>
 
-            <div className="projects-layout">
-                {/* Projects List */}
-                <div className="projects-list-panel glass">
-                    <h3 className="panel-title"><ListTodo size={20} /> Proyectos Activos</h3>
-                    <div className="project-items">
-                        {projects.map(project => (
-                            <div
-                                key={project.id}
-                                className={`project-item glass ${selectedProject?.id === project.id ? 'active' : ''}`}
-                                onClick={() => {
-                                    setSelectedProject(project);
-                                    setIsCreating(false);
-                                    fetchStages(project.id);
-                                }}
-                            >
-                                <div className="project-info">
-                                    <h4>{project.name}</h4>
-                                    <div className="progress-mini">
-                                        <div className="progress-bar-bg">
-                                            <div className="progress-bar-fill" style={{ width: `${project.progress}%` }}></div>
-                                        </div>
-                                        <span>{project.progress}%</span>
-                                    </div>
-                                </div>
-                                <ChevronRight size={18} />
-                            </div>
-                        ))}
+            {/* Creation Modal / Form */}
+            {isCreating && (
+                <div className="card project-create-card glass fade-in">
+                    <div className="card-header">
+                        <h3><FolderKanban size={20} className="header-icon" /> Crear Nueva Iniciativa</h3>
+                        <p>Completa la información clave del proyecto para el equipo</p>
                     </div>
-                </div>
 
-                {/* Main Action Area */}
-                <div className="project-detail-panel glass">
-                    {isCreating ? (
-                        <form onSubmit={handleCreateProject} className="project-form">
-                            <h3>Crear Nuevo Proyecto</h3>
+                    <form onSubmit={handleCreateProject} className="create-project-form">
+                        <div className="form-grid">
                             <div className="form-group">
                                 <label>Nombre del Proyecto</label>
                                 <input
                                     type="text"
                                     required
+                                    placeholder="Ej. Modernización de Infraestructura"
                                     value={formData.name}
-                                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                 />
                             </div>
+
                             <div className="form-group">
-                                <label>Objetivo</label>
-                                <textarea
-                                    required
-                                    rows="3"
-                                    value={formData.objective}
-                                    onChange={e => setFormData({ ...formData, objective: e.target.value })}
-                                ></textarea>
-                            </div>
-                            <div className="form-group">
-                                <label>Público Objetivo</label>
+                                <label>Público Objetivo / Beneficiario</label>
                                 <input
                                     type="text"
+                                    placeholder="Ej. Clientes Corporativos, Equipo Interno"
                                     value={formData.target_audience}
-                                    onChange={e => setFormData({ ...formData, target_audience: e.target.value })}
+                                    onChange={(e) => setFormData({ ...formData, target_audience: e.target.value })}
                                 />
                             </div>
-                            <button type="submit" className="btn btn-primary w-full">
-                                <Save size={20} /> Guardar Proyecto
+                        </div>
+
+                        <div className="form-group">
+                            <label>Objetivo Principal</label>
+                            <textarea
+                                rows="3"
+                                placeholder="Describe el impacto y meta esperada..."
+                                value={formData.objective}
+                                onChange={(e) => setFormData({ ...formData, objective: e.target.value })}
+                            />
+                        </div>
+
+                        <div className="form-actions">
+                            <button type="submit" className="btn-primary">
+                                <Save size={18} />
+                                Guardar Proyecto
                             </button>
-                        </form>
-                    ) : selectedProject ? (
-                        <div className="project-details">
-                            <div className="details-header">
-                                <div className="header-title-group">
-                                    <h2>{selectedProject.name}</h2>
-                                    <div className="project-progress-main">
-                                        <div className="progress-bar-container">
-                                            <div
-                                                className="progress-bar-fill-large"
-                                                style={{ width: `${selectedProject.progress}%` }}
-                                            ></div>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            {/* Master Detail Grid */}
+            <div className="projects-grid-layout">
+                {/* Left: Projects List */}
+                <div className="card projects-list-column glass">
+                    <div className="column-header">
+                        <div className="column-title">
+                            <Layers size={18} />
+                            <span>Iniciativas Activas ({filteredProjects.length})</span>
+                        </div>
+                    </div>
+
+                    <div className="projects-items-stack">
+                        {loading ? (
+                            <div className="empty-state">
+                                <span className="loading-spinner"></span>
+                                <p>Cargando proyectos...</p>
+                            </div>
+                        ) : filteredProjects.length === 0 ? (
+                            <div className="empty-state">
+                                <FolderKanban size={36} className="empty-icon" />
+                                <p>No hay proyectos registrados</p>
+                            </div>
+                        ) : (
+                            filteredProjects.map(project => {
+                                const isSelected = selectedProject?.id === project.id;
+                                const progColor = getProgressColor(project.progress);
+
+                                return (
+                                    <div
+                                        key={project.id}
+                                        className={`project-card-item glass ${isSelected ? 'selected' : ''}`}
+                                        onClick={() => {
+                                            setSelectedProject(project);
+                                            fetchStages(project.id);
+                                        }}
+                                    >
+                                        <div className="project-card-top">
+                                            <h4>{project.name}</h4>
+                                            <span className="project-prog-badge" style={{ color: progColor, borderColor: progColor }}>
+                                                {project.progress}%
+                                            </span>
                                         </div>
-                                        <span className="progress-percentage">{selectedProject.progress}%</span>
+
+                                        <div className="project-card-progress-bar">
+                                            <div 
+                                                className="progress-fill" 
+                                                style={{ width: `${project.progress}%`, backgroundColor: progColor }}
+                                            />
+                                        </div>
+
+                                        <div className="project-card-footer">
+                                            <span className="project-audience">
+                                                <Users size={13} />
+                                                {project.target_audience || 'General'}
+                                            </span>
+                                            <ChevronRight size={16} className="chevron-icon" />
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
+
+                {/* Right: Selected Project Detail & Stages */}
+                <div className="card project-detail-column glass">
+                    {selectedProject ? (
+                        <div className="detail-content fade-in">
+                            {/* Project Header Info */}
+                            <div className="detail-header-card glass">
+                                <div className="detail-header-main">
+                                    <div>
+                                        <span className="badge badge-admin">Proyecto Activo</span>
+                                        <h2>{selectedProject.name}</h2>
+                                    </div>
+                                    <button
+                                        className="btn-delete-project"
+                                        onClick={() => deleteProject(selectedProject.id)}
+                                        title="Eliminar proyecto"
+                                    >
+                                        <Trash2 size={16} />
+                                        <span>Eliminar</span>
+                                    </button>
+                                </div>
+
+                                <div className="detail-meta-grid">
+                                    <div className="meta-box">
+                                        <span className="meta-label"><Target size={14} /> Objetivo</span>
+                                        <p className="meta-value">{selectedProject.objective || 'Sin objetivo detallado'}</p>
+                                    </div>
+
+                                    <div className="meta-box">
+                                        <span className="meta-label"><Users size={14} /> Destinatarios</span>
+                                        <p className="meta-value">{selectedProject.target_audience || 'Sin especificar'}</p>
                                     </div>
                                 </div>
-                                <button className="btn-icon text-error" onClick={() => deleteProject(selectedProject.id)}>
-                                    <Trash2 size={24} />
-                                </button>
+
+                                <div className="detail-progress-section">
+                                    <div className="prog-header">
+                                        <span>Avance Global Consolidado</span>
+                                        <span className="prog-percent">{selectedProject.progress}%</span>
+                                    </div>
+                                    <div className="prog-track">
+                                        <div 
+                                            className="prog-bar" 
+                                            style={{ 
+                                                width: `${selectedProject.progress}%`,
+                                                backgroundColor: getProgressColor(selectedProject.progress)
+                                            }}
+                                        />
+                                    </div>
+                                </div>
                             </div>
 
-                            <div className="metadata-grid">
-                                <div className="meta-item glass">
-                                    <Target size={18} />
-                                    <div>
-                                        <label>Objetivo</label>
-                                        <p>{selectedProject.objective}</p>
-                                    </div>
-                                </div>
-                                <div className="meta-item glass">
-                                    <Users size={18} />
-                                    <div>
-                                        <label>Público</label>
-                                        <p>{selectedProject.target_audience || 'No definido'}</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="stages-section">
-                                <div className="section-header">
-                                    <h3>Etapas del Proyecto</h3>
-                                    <div className="overall-progress">{selectedProject.progress}% completado</div>
+                            {/* Stages Section */}
+                            <div className="stages-container">
+                                <div className="stages-section-header">
+                                    <h3><ListTodo size={18} /> Cronograma de Fases y Etapas ({stages.length})</h3>
                                 </div>
 
-                                <div className="stages-list">
-                                    {stages.map(stage => (
-                                        <div key={stage.id} className={`stage-item glass ${stage.status === 'done' ? 'done' : ''}`}>
-                                            <button
-                                                className="status-toggle"
-                                                onClick={() => toggleStageStatus(stage)}
-                                            >
-                                                {stage.status === 'done' ? <CheckCircle2 className="text-success" /> : <Clock className="text-warning" />}
-                                            </button>
-                                            <div className="stage-info">
-                                                <h4>{stage.name}</h4>
-                                                <div className="stage-dates">
-                                                    <Calendar size={14} />
-                                                    <span>{stage.start_date || '?'} - {stage.end_date || '?'}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-
+                                {/* Add Stage Form */}
                                 <form onSubmit={handleAddStage} className="add-stage-form glass">
-                                    <h4>Agregar Nueva Etapa</h4>
-                                    <div className="form-row">
+                                    <div className="stage-input-group">
                                         <input
                                             type="text"
-                                            placeholder="Nombre de la etapa"
                                             required
+                                            placeholder="Nombre de la etapa o hito..."
                                             value={newStage.name}
-                                            onChange={e => setNewStage({ ...newStage, name: e.target.value })}
+                                            onChange={(e) => setNewStage({ ...newStage, name: e.target.value })}
                                         />
-                                        <div className="date-inputs">
+                                    </div>
+
+                                    <div className="stage-dates-group">
+                                        <div className="date-input-wrap">
+                                            <span className="date-label">Inicio</span>
                                             <input
                                                 type="date"
+                                                required
                                                 value={newStage.start_date}
-                                                onChange={e => setNewStage({ ...newStage, start_date: e.target.value })}
+                                                onChange={(e) => setNewStage({ ...newStage, start_date: e.target.value })}
                                             />
+                                        </div>
+
+                                        <div className="date-input-wrap">
+                                            <span className="date-label">Fin</span>
                                             <input
                                                 type="date"
                                                 value={newStage.end_date}
-                                                onChange={e => setNewStage({ ...newStage, end_date: e.target.value })}
+                                                onChange={(e) => setNewStage({ ...newStage, end_date: e.target.value })}
                                             />
                                         </div>
-                                        <button type="submit" className="btn btn-primary">
-                                            <Plus size={18} />
-                                        </button>
                                     </div>
+
+                                    <button type="submit" className="btn-add-stage">
+                                        <Plus size={16} />
+                                        <span>Agregar</span>
+                                    </button>
                                 </form>
+
+                                {/* Stages List */}
+                                <div className="stages-stack">
+                                    {stages.length === 0 ? (
+                                        <div className="empty-stages">
+                                            <Clock size={32} className="empty-icon" />
+                                            <p>Este proyecto aún no tiene etapas definidas. Agrega la primera arriba.</p>
+                                        </div>
+                                    ) : (
+                                        stages.map((stage) => {
+                                            const isDone = stage.status === 'completed' || stage.status === 'done';
+                                            const isInProgress = stage.status === 'in_progress';
+
+                                            return (
+                                                <div 
+                                                    key={stage.id} 
+                                                    className={`stage-item-card glass ${isDone ? 'is-done' : ''} ${isInProgress ? 'is-in-progress' : ''}`}
+                                                >
+                                                    <div className="stage-left-block">
+                                                        <button 
+                                                            type="button"
+                                                            className="stage-status-toggle"
+                                                            onClick={() => toggleStageStatus(stage)}
+                                                            title="Clic para cambiar estado"
+                                                        >
+                                                            {isDone && <CheckCircle2 size={20} className="status-icon-done" />}
+                                                            {isInProgress && <PlayCircle size={20} className="status-icon-progress" />}
+                                                            {!isDone && !isInProgress && <Clock size={20} className="status-icon-pending" />}
+                                                        </button>
+
+                                                        <div className="stage-info">
+                                                            <span className={`stage-title ${isDone ? 'completed-text' : ''}`}>
+                                                                {stage.name}
+                                                            </span>
+                                                            <div className="stage-dates-meta">
+                                                                <Calendar size={12} />
+                                                                <span>{stage.start_date || '-'}</span>
+                                                                {stage.end_date && <span>→ {stage.end_date}</span>}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="stage-right-block">
+                                                        <span 
+                                                            className={`stage-pill ${stage.status}`}
+                                                            onClick={() => toggleStageStatus(stage)}
+                                                        >
+                                                            {isDone && 'Completada'}
+                                                            {isInProgress && 'En Progreso'}
+                                                            {!isDone && !isInProgress && 'Pendiente'}
+                                                        </span>
+
+                                                        <button 
+                                                            type="button"
+                                                            className="btn-trash-stage" 
+                                                            onClick={() => deleteStage(stage.id)}
+                                                            title="Eliminar etapa"
+                                                        >
+                                                            <Trash2 size={15} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
                             </div>
                         </div>
                     ) : (
-                        <div className="empty-state">
-                            <ListTodo size={48} />
-                            <p>Selecciona un proyecto para ver sus detalles o crea uno nuevo.</p>
+                        <div className="empty-selection-state">
+                            <FolderKanban size={48} className="empty-icon" />
+                            <h3>Selecciona un proyecto</h3>
+                            <p>Elige una iniciativa de la lista para gestionar sus etapas y métricas de avance</p>
                         </div>
                     )}
                 </div>

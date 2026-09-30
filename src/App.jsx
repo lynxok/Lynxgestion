@@ -1,4 +1,5 @@
 import { useAuth, AuthProvider } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import './index.css';
@@ -10,9 +11,11 @@ function AppContent() {
 
 function App() {
     return (
-        <AuthProvider>
-            <AppContent />
-        </AuthProvider>
+        <ToastProvider>
+            <AuthProvider>
+                <AppContent />
+            </AuthProvider>
+        </ToastProvider>
     );
 }
 
