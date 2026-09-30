@@ -9,10 +9,21 @@ export function AuthProvider({ children }) {
     const [authError, setAuthError] = useState(null);
     const [lastActivity, setLastActivity] = useState(Date.now());
 
-    // --- SESSION SECURITY: SINGLE SESSION ---
+    // --- SESSION SECURITY: SAFE UUID & SINGLE SESSION ---
+    const generateSessionId = () => {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+            try {
+                return crypto.randomUUID();
+            } catch {
+                // fallback
+            }
+        }
+        return 'lynx_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now().toString(36);
+    };
+
     const syncSessionId = async (userId) => {
         try {
-            const newSessionId = crypto.randomUUID();
+            const newSessionId = generateSessionId();
             localStorage.setItem('lynx_session_id', newSessionId);
 
             await supabase
@@ -22,7 +33,7 @@ export function AuthProvider({ children }) {
 
             return newSessionId;
         } catch (err) {
-            console.error('Session sync error:', err);
+            console.warn('Session sync warning:', err);
             return null;
         }
     };
@@ -32,6 +43,8 @@ export function AuthProvider({ children }) {
 
         try {
             const localSessionId = localStorage.getItem('lynx_session_id');
+            if (!localSessionId) return true;
+
             const { data, error } = await supabase
                 .from('profiles')
                 .select('current_session_id')
@@ -47,7 +60,7 @@ export function AuthProvider({ children }) {
             }
             return true;
         } catch (err) {
-            console.error('Verify session error:', err);
+            console.warn('Verify session warning:', err);
             return true;
         }
     };
@@ -86,6 +99,58 @@ export function AuthProvider({ children }) {
         };
     }, [user, lastActivity]);
 
+    let isCheckingApproval = false;
+
+    const checkUserApproval = async (currentUser) => {
+        if (!currentUser) {
+            setUser(null);
+            return;
+        }
+
+        if (isCheckingApproval) return;
+        isCheckingApproval = true;
+
+        try {
+            setAuthError(null);
+            const { data: profile, error } = await supabase
+                .from('profiles')
+                .select('is_approved, role')
+                .eq('id', currentUser.id)
+                .single();
+
+            if (error) {
+                console.warn('Profile fetch note:', error);
+                if (error.code === 'PGRST116') {
+                    setAuthError('Tu perfil aún no existe en la base de datos. Regístrate para comenzar.');
+                } else {
+                    setAuthError('Error de conexión al verificar el perfil.');
+                }
+                await supabase.auth.signOut();
+                setUser(null);
+                return;
+            }
+
+            if (profile?.is_approved) {
+                currentUser.role = profile.role;
+
+                if (!localStorage.getItem('lynx_session_id')) {
+                    await syncSessionId(currentUser.id);
+                }
+
+                setUser(currentUser);
+            } else {
+                setAuthError('Tu cuenta está pendiente de aprobación por el administrador.');
+                await supabase.auth.signOut();
+                setUser(null);
+            }
+        } catch (err) {
+            console.error('Auth check error:', err);
+            setUser(null);
+        } finally {
+            isCheckingApproval = false;
+        }
+    };
+
     useEffect(() => {
         const initSession = async () => {
             try {
@@ -118,49 +183,6 @@ export function AuthProvider({ children }) {
 
         return () => subscription?.unsubscribe();
     }, []);
-
-    const checkUserApproval = async (currentUser) => {
-        if (!currentUser) {
-            setUser(null);
-            return;
-        }
-
-        try {
-            setAuthError(null);
-            const { data: profile, error } = await supabase
-                .from('profiles')
-                .select('is_approved, role')
-                .eq('id', currentUser.id)
-                .single();
-
-            if (error) {
-                console.warn('Profile fetch note:', error);
-                if (error.code === 'PGRST116') {
-                    setAuthError('Tu perfil aún no existe en la base de datos. Regístrate para comenzar.');
-                }
-                await supabase.auth.signOut();
-                setUser(null);
-                return;
-            }
-
-            if (profile?.is_approved) {
-                currentUser.role = profile.role;
-
-                if (!localStorage.getItem('lynx_session_id')) {
-                    await syncSessionId(currentUser.id);
-                }
-
-                setUser(currentUser);
-            } else {
-                setAuthError('Tu cuenta está pendiente de aprobación por el administrador.');
-                await supabase.auth.signOut();
-                setUser(null);
-            }
-        } catch (err) {
-            console.error('Auth check error:', err);
-            setUser(null);
-        }
-    };
 
     const login = async (email, password) => {
         setLoading(true);

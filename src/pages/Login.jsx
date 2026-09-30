@@ -21,24 +21,34 @@ export default function Login() {
         setAuthError(null);
         setLoading(true);
 
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('TIMEOUT: El servidor tardó demasiado en responder. Revisa tu conexión.')), 10000)
+        );
+
         try {
             if (isLogin) {
-                await login(email, password);
+                await Promise.race([login(email.trim(), password), timeoutPromise]);
                 toast.success('¡Bienvenido al sistema LYNX Gestión!');
             } else {
-                const { data, error } = await supabase.auth.signUp({
-                    email,
-                    password,
-                });
-                if (error) throw error;
+                const signUpPromise = (async () => {
+                    const { data, error } = await supabase.auth.signUp({
+                        email: email.trim(),
+                        password,
+                    });
+                    if (error) throw error;
+                    return data;
+                })();
+                await Promise.race([signUpPromise, timeoutPromise]);
                 toast.success('Cuenta registrada correctamente. Iniciando sesión...');
             }
         } catch (err) {
-            console.error(err);
+            console.error('Login submit error:', err);
             if (err.message?.includes('Invalid login credentials')) {
                 setLocalError('Credenciales incorrectas. Verifica tu correo y contraseña.');
             } else if (err.message?.includes('User already registered')) {
                 setLocalError('Este correo electrónico ya se encuentra registrado.');
+            } else if (err.message?.includes('TIMEOUT')) {
+                setLocalError('Tiempo de conexión agotado. Inténtalo nuevamente.');
             } else {
                 setLocalError('Error: ' + (err.message || 'Error de autenticación'));
             }
