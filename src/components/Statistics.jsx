@@ -13,28 +13,47 @@ import {
     Filter, 
     Receipt, 
     Percent, 
-    Wallet 
+    Wallet,
+    FolderKanban,
+    Tags,
+    Layers,
+    User,
+    Truck
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import './Statistics.css';
 
 export default function Statistics() {
+    const { currentCompany } = useAuth();
     const { toast } = useToast();
     const [movements, setMovements] = useState([]);
     const [loading, setLoading] = useState(true);
     const [timeRange, setTimeRange] = useState('all'); // 'all', '30d', '90d', 'year'
 
+    // Grouping Modes
+    const [incomeGroupMode, setIncomeGroupMode] = useState('project'); // 'project' | 'category'
+    const [expenseGroupMode, setExpenseGroupMode] = useState('cost_center'); // 'cost_center' | 'responsible' | 'supplier'
+
     useEffect(() => {
         fetchMovements();
-    }, []);
+    }, [currentCompany]);
 
     const fetchMovements = async () => {
         try {
             setLoading(true);
             const { data, error } = await supabase
                 .from('movements')
-                .select('*')
+                .select(`
+                    *,
+                    projects(name),
+                    income_categories(name),
+                    cost_centers(name, code),
+                    suppliers(name),
+                    expense_responsibles(name),
+                    cash_boxes(name)
+                `)
                 .order('date', { ascending: true });
 
             if (error) throw error;
@@ -71,13 +90,18 @@ export default function Statistics() {
     const stats = useMemo(() => {
         let totalIncome = 0;
         let totalExpense = 0;
+
+        const incomeByProject = {};
+        const incomeByCategory = {};
+        const expenseByCostCenter = {};
         const expenseByResponsible = {};
+        const expenseBySupplier = {};
         const monthlyStats = {};
 
         filteredMovements.forEach(m => {
             const amount = parseFloat(m.amount || 0);
             const [year, month] = (m.date || '').split('-');
-            const monthKey = month && year ? `${month}/${year}` : 'Otro';
+            const monthKey = month && year ? `${month}/${year}` : 'General';
 
             if (!monthlyStats[monthKey]) {
                 monthlyStats[monthKey] = { name: monthKey, ingresos: 0, gastos: 0, balance: 0 };
@@ -86,18 +110,45 @@ export default function Statistics() {
             if (m.type === 'income') {
                 totalIncome += amount;
                 monthlyStats[monthKey].ingresos += amount;
+
+                // Group Income by Project
+                const projName = m.projects?.name || (m.company ? `Cliente: ${m.company}` : 'Sin Proyecto');
+                incomeByProject[projName] = (incomeByProject[projName] || 0) + amount;
+
+                // Group Income by Category
+                const catName = m.income_categories?.name || 'Varios / General';
+                incomeByCategory[catName] = (incomeByCategory[catName] || 0) + amount;
             } else {
                 totalExpense += amount;
                 monthlyStats[monthKey].gastos += amount;
 
-                const resp = m.company || 'Sin asignar';
-                expenseByResponsible[resp] = (expenseByResponsible[resp] || 0) + amount;
+                // Group Expense by Cost Center
+                const ccName = m.cost_centers?.name || 'Gastos Operativos';
+                expenseByCostCenter[ccName] = (expenseByCostCenter[ccName] || 0) + amount;
+
+                // Group Expense by Responsible
+                const respName = m.expense_responsibles?.name || m.company || 'Sin Asignar';
+                expenseByResponsible[respName] = (expenseByResponsible[respName] || 0) + amount;
+
+                // Group Expense by Supplier
+                const suppName = m.suppliers?.name || 'Proveedor General';
+                expenseBySupplier[suppName] = (expenseBySupplier[suppName] || 0) + amount;
             }
 
             monthlyStats[monthKey].balance = monthlyStats[monthKey].ingresos - monthlyStats[monthKey].gastos;
         });
 
-        const pieData = Object.entries(expenseByResponsible).map(([name, value]) => ({ name, value }));
+        const incomeData = (incomeGroupMode === 'project' ? Object.entries(incomeByProject) : Object.entries(incomeByCategory))
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value);
+
+        const expenseData = (
+            expenseGroupMode === 'cost_center' ? Object.entries(expenseByCostCenter) :
+            expenseGroupMode === 'responsible' ? Object.entries(expenseByResponsible) :
+            Object.entries(expenseBySupplier)
+        ).map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value);
+
         const barData = Object.values(monthlyStats);
         const netBalance = totalIncome - totalExpense;
         const savingsRate = totalIncome > 0 ? Math.round((netBalance / totalIncome) * 100) : 0;
@@ -109,10 +160,11 @@ export default function Statistics() {
             netBalance, 
             savingsRate, 
             totalTransactions, 
-            pieData, 
+            incomeData,
+            expenseData, 
             barData 
         };
-    }, [filteredMovements]);
+    }, [filteredMovements, incomeGroupMode, expenseGroupMode]);
 
     const exportToCSV = () => {
         if (filteredMovements.length === 0) {
@@ -120,14 +172,18 @@ export default function Statistics() {
             return;
         }
 
-        const headers = ['ID', 'Fecha', 'Tipo', 'Monto', 'Empresa/Responsable', 'Detalle/Cuenta'];
+        const headers = ['ID', 'Fecha', 'Tipo', 'Monto', 'Proyecto', 'Categoria Ingreso', 'Centro de Costos', 'Responsable', 'Proveedor', 'Caja'];
         const rows = filteredMovements.map(m => [
             m.id,
             m.date,
             m.type === 'income' ? 'Ingreso' : 'Gasto',
             m.amount,
-            `"${(m.company || '').replace(/"/g, '""')}"`,
-            `"${((m.type === 'income' ? m.account : m.description) || '').replace(/"/g, '""')}"`
+            `"${(m.projects?.name || '').replace(/"/g, '""')}"`,
+            `"${(m.income_categories?.name || '').replace(/"/g, '""')}"`,
+            `"${(m.cost_centers?.name || '').replace(/"/g, '""')}"`,
+            `"${(m.expense_responsibles?.name || m.company || '').replace(/"/g, '""')}"`,
+            `"${(m.suppliers?.name || '').replace(/"/g, '""')}"`,
+            `"${(m.cash_boxes?.name || m.account || '').replace(/"/g, '""')}"`
         ]);
 
         const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -135,7 +191,7 @@ export default function Statistics() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.setAttribute('href', url);
-        link.setAttribute('download', `reporte_financiero_lynx_${new Date().toISOString().split('T')[0]}.csv`);
+        link.setAttribute('download', `balance_financiero_lynx_${new Date().toISOString().split('T')[0]}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -150,7 +206,8 @@ export default function Statistics() {
         }).format(amount);
     };
 
-    const COLORS = ['#F59E0B', '#3B82F6', '#10B981', '#EC4899', '#8B5CF6', '#14B8A6', '#F97316'];
+    const COLORS_INCOME = ['#10B981', '#34D399', '#059669', '#38BDF8', '#6366F1', '#F59E0B', '#F97316'];
+    const COLORS_EXPENSE = ['#EF4444', '#F87171', '#DC2626', '#F59E0B', '#A855F7', '#8B5CF6', '#EC4899'];
 
     if (loading) {
         return (
@@ -208,7 +265,7 @@ export default function Statistics() {
                     <div className="metric-info">
                         <span className="metric-title">Ingresos Totales</span>
                         <h3 className="metric-number text-success">{formatCurrency(stats.totalIncome)}</h3>
-                        <span className="metric-sub">Entradas registradas</span>
+                        <span className="metric-sub">Entradas imputadas</span>
                     </div>
                 </div>
 
@@ -219,7 +276,7 @@ export default function Statistics() {
                     <div className="metric-info">
                         <span className="metric-title">Gastos Totales</span>
                         <h3 className="metric-number text-danger">{formatCurrency(stats.totalExpense)}</h3>
-                        <span className="metric-sub">Egresos operativos</span>
+                        <span className="metric-sub">Centros de costos</span>
                     </div>
                 </div>
 
@@ -228,11 +285,11 @@ export default function Statistics() {
                         <Wallet size={22} />
                     </div>
                     <div className="metric-info">
-                        <span className="metric-title">Balance Neto</span>
+                        <span className="metric-title">Balance de Flujo</span>
                         <h3 className={`metric-number ${stats.netBalance >= 0 ? 'text-success' : 'text-danger'}`}>
                             {formatCurrency(stats.netBalance)}
                         </h3>
-                        <span className="metric-sub">Margen financiero</span>
+                        <span className="metric-sub">Margen financiero neto</span>
                     </div>
                 </div>
 
@@ -243,75 +300,210 @@ export default function Statistics() {
                     <div className="metric-info">
                         <span className="metric-title">Rendimiento</span>
                         <h3 className="metric-number text-accent">{stats.savingsRate}%</h3>
-                        <span className="metric-sub">{stats.totalTransactions} movimientos</span>
+                        <span className="metric-sub">{stats.totalTransactions} transacciones</span>
                     </div>
                 </div>
             </div>
 
-            {/* Charts Grid */}
+            {/* Charts Section */}
             <div className="stats-charts-grid">
-                {/* Expense by Responsible */}
-                <div className="card chart-panel glass">
-                    <div className="panel-header">
-                        <h3>Distribución de Gastos por Responsable</h3>
-                        <span className="panel-tag">Porcentaje</span>
+                {/* INGRESOS BREAKDOWN */}
+                <div className="card chart-card glass">
+                    <div className="chart-header">
+                        <div>
+                            <h3 className="chart-title">Composición de Ingresos</h3>
+                            <p className="chart-subtitle">Desglose de recaudación según criterio seleccionado</p>
+                        </div>
+                        <div className="chart-mode-pills">
+                            <button 
+                                className={`mode-pill ${incomeGroupMode === 'project' ? 'active' : ''}`}
+                                onClick={() => setIncomeGroupMode('project')}
+                            >
+                                <FolderKanban size={13} />
+                                <span>Por Proyecto</span>
+                            </button>
+                            <button 
+                                className={`mode-pill ${incomeGroupMode === 'category' ? 'active' : ''}`}
+                                onClick={() => setIncomeGroupMode('category')}
+                            >
+                                <Tags size={13} />
+                                <span>Por Categoría</span>
+                            </button>
+                        </div>
                     </div>
-                    <div className="chart-container">
-                        {stats.pieData.length > 0 ? (
-                            <ResponsiveContainer width="100%" height={320}>
-                                <PieChart>
-                                    <Pie
-                                        data={stats.pieData}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={70}
-                                        outerRadius={95}
-                                        paddingAngle={4}
-                                        dataKey="value"
-                                    >
-                                        {stats.pieData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip
-                                        formatter={(val) => [formatCurrency(val), 'Gasto']}
-                                        contentStyle={{ backgroundColor: '#0F172A', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '8px', color: '#F8FAFC' }}
-                                    />
-                                    <Legend verticalAlign="bottom" height={40} />
-                                </PieChart>
-                            </ResponsiveContainer>
+
+                    <div className="chart-content">
+                        {stats.incomeData.length === 0 ? (
+                            <div className="chart-empty">
+                                <Receipt size={32} />
+                                <p>Sin ingresos registrados en este período</p>
+                            </div>
                         ) : (
-                            <div className="no-chart-data">No se registraron gastos en este período</div>
+                            <div className="chart-with-legend">
+                                <div className="chart-donut-wrap">
+                                    <ResponsiveContainer width="100%" height={240}>
+                                        <PieChart>
+                                            <Pie
+                                                data={stats.incomeData}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={60}
+                                                outerRadius={95}
+                                                paddingAngle={4}
+                                                dataKey="value"
+                                            >
+                                                {stats.incomeData.map((_, index) => (
+                                                    <Cell key={`income-${index}`} fill={COLORS_INCOME[index % COLORS_INCOME.length]} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip 
+                                                formatter={(value) => [formatCurrency(value), 'Monto']}
+                                                contentStyle={{ background: '#0F172A', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                                            />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+
+                                <div className="chart-legend-list">
+                                    {stats.incomeData.slice(0, 5).map((entry, idx) => {
+                                        const pct = stats.totalIncome > 0 ? ((entry.value / stats.totalIncome) * 100).toFixed(1) : 0;
+                                        return (
+                                            <div key={idx} className="legend-row">
+                                                <div className="legend-left">
+                                                    <span className="legend-dot" style={{ background: COLORS_INCOME[idx % COLORS_INCOME.length] }} />
+                                                    <span className="legend-name" title={entry.name}>{entry.name}</span>
+                                                </div>
+                                                <div className="legend-right">
+                                                    <span className="legend-val">{formatCurrency(entry.value)}</span>
+                                                    <span className="legend-pct">{pct}%</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
                         )}
                     </div>
                 </div>
 
-                {/* Monthly Evolution */}
-                <div className="card chart-panel glass">
-                    <div className="panel-header">
-                        <h3>Evolución Mensual (Ingresos vs Gastos)</h3>
-                        <span className="panel-tag">Comparativa</span>
+                {/* EGRESOS BREAKDOWN (CENTROS DE COSTOS) */}
+                <div className="card chart-card glass">
+                    <div className="chart-header">
+                        <div>
+                            <h3 className="chart-title">Egresos por Centro de Costos</h3>
+                            <p className="chart-subtitle">Imputación del gasto según estructura de costos</p>
+                        </div>
+                        <div className="chart-mode-pills">
+                            <button 
+                                className={`mode-pill ${expenseGroupMode === 'cost_center' ? 'active' : ''}`}
+                                onClick={() => setExpenseGroupMode('cost_center')}
+                            >
+                                <Layers size={13} />
+                                <span>Centro de Costos</span>
+                            </button>
+                            <button 
+                                className={`mode-pill ${expenseGroupMode === 'responsible' ? 'active' : ''}`}
+                                onClick={() => setExpenseGroupMode('responsible')}
+                            >
+                                <User size={13} />
+                                <span>Responsable</span>
+                            </button>
+                            <button 
+                                className={`mode-pill ${expenseGroupMode === 'supplier' ? 'active' : ''}`}
+                                onClick={() => setExpenseGroupMode('supplier')}
+                            >
+                                <Truck size={13} />
+                                <span>Proveedor</span>
+                            </button>
+                        </div>
                     </div>
-                    <div className="chart-container">
-                        {stats.barData.length > 0 ? (
-                            <ResponsiveContainer width="100%" height={320}>
-                                <BarChart data={stats.barData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                                    <XAxis dataKey="name" stroke="#94A3B8" fontSize={12} />
-                                    <YAxis stroke="#94A3B8" fontSize={12} tickFormatter={(v) => `$${v / 1000}k`} />
-                                    <Tooltip
-                                        formatter={(val) => [formatCurrency(val), '']}
-                                        contentStyle={{ backgroundColor: '#0F172A', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '8px', color: '#F8FAFC' }}
-                                    />
-                                    <Legend verticalAlign="bottom" height={40} />
-                                    <Bar dataKey="ingresos" name="Ingresos" fill="#10B981" radius={[4, 4, 0, 0]} />
-                                    <Bar dataKey="gastos" name="Gastos" fill="#EF4444" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
+
+                    <div className="chart-content">
+                        {stats.expenseData.length === 0 ? (
+                            <div className="chart-empty">
+                                <Receipt size={32} />
+                                <p>Sin egresos registrados en este período</p>
+                            </div>
                         ) : (
-                            <div className="no-chart-data">No hay datos mensuales registrados</div>
+                            <div className="chart-with-legend">
+                                <div className="chart-donut-wrap">
+                                    <ResponsiveContainer width="100%" height={240}>
+                                        <PieChart>
+                                            <Pie
+                                                data={stats.expenseData}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={60}
+                                                outerRadius={95}
+                                                paddingAngle={4}
+                                                dataKey="value"
+                                            >
+                                                {stats.expenseData.map((_, index) => (
+                                                    <Cell key={`expense-${index}`} fill={COLORS_EXPENSE[index % COLORS_EXPENSE.length]} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip 
+                                                formatter={(value) => [formatCurrency(value), 'Monto']}
+                                                contentStyle={{ background: '#0F172A', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                                            />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+
+                                <div className="chart-legend-list">
+                                    {stats.expenseData.slice(0, 5).map((entry, idx) => {
+                                        const pct = stats.totalExpense > 0 ? ((entry.value / stats.totalExpense) * 100).toFixed(1) : 0;
+                                        return (
+                                            <div key={idx} className="legend-row">
+                                                <div className="legend-left">
+                                                    <span className="legend-dot" style={{ background: COLORS_EXPENSE[idx % COLORS_EXPENSE.length] }} />
+                                                    <span className="legend-name" title={entry.name}>{entry.name}</span>
+                                                </div>
+                                                <div className="legend-right">
+                                                    <span className="legend-val">{formatCurrency(entry.value)}</span>
+                                                    <span className="legend-pct">{pct}%</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
                         )}
                     </div>
+                </div>
+            </div>
+
+            {/* Monthly Trend Evolution */}
+            <div className="card chart-card glass full-width-chart">
+                <div className="chart-header">
+                    <div>
+                        <h3 className="chart-title">Evolución de Flujo Financiero Mensual</h3>
+                        <p className="chart-subtitle">Comparativa temporal de ingresos, gastos y balance neto</p>
+                    </div>
+                </div>
+
+                <div className="chart-content" style={{ height: '320px' }}>
+                    {stats.barData.length === 0 ? (
+                        <div className="chart-empty">
+                            <Activity size={32} />
+                            <p>No hay suficientes transacciones para graficar la evolución</p>
+                        </div>
+                    ) : (
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={stats.barData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                                <XAxis dataKey="name" stroke="#94A3B8" fontSize={12} />
+                                <YAxis stroke="#94A3B8" fontSize={12} tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`} />
+                                <Tooltip 
+                                    formatter={(value) => [formatCurrency(value)]}
+                                    contentStyle={{ background: '#0F172A', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                                />
+                                <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                                <Bar dataKey="ingresos" name="Ingresos" fill="#10B981" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="gastos" name="Gastos" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    )}
                 </div>
             </div>
         </div>

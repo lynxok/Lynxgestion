@@ -67,6 +67,44 @@
     margin-top: 0.15rem;
 }
 
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    flex-wrap: wrap;
+}
+
+.company-selector-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.65rem;
+    border-radius: var(--radius-md);
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.1);
+}
+
+.company-icon {
+    color: #FBBF24;
+}
+
+.company-select-input {
+    background: transparent;
+    border: none;
+    color: #F8FAFC;
+    font-size: 0.85rem;
+    font-weight: 700;
+    font-family: inherit;
+    outline: none;
+    cursor: pointer;
+}
+
+.company-select-input option {
+    background: #0B1120;
+    color: #F8FAFC;
+}
+
 .date-badge {
     display: flex;
     align-items: center;

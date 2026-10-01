@@ -9,19 +9,22 @@ import {
     Settings as SettingsIcon,
     LogOut, 
     ShieldCheck, 
+    ShieldAlert,
+    Crown,
     User, 
-    Sparkles 
+    Sparkles,
+    Building
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import './Sidebar.css';
 
 export default function Sidebar({ activeTab, setActiveTab }) {
     const [isOpen, setIsOpen] = useState(false);
-    const { user, logout } = useAuth();
+    const { user, logout, hasModulePermission, currentCompany } = useAuth();
 
     const toggleSidebar = () => setIsOpen(!isOpen);
 
-    const menuItems = [
+    const allMenuItems = [
         { id: 'movements', label: 'Cargar Movimientos', icon: <Receipt size={19} /> },
         { id: 'statistics', label: 'Estadísticas Financieras', icon: <PieChart size={19} /> },
         { id: 'projects', label: 'Gestión de Proyectos', icon: <FolderKanban size={19} /> },
@@ -29,8 +32,35 @@ export default function Sidebar({ activeTab, setActiveTab }) {
         { id: 'settings', label: 'Configuraciones', icon: <SettingsIcon size={19} /> },
     ];
 
+    // Filter menu items by user permissions
+    const menuItems = allMenuItems.filter(item => hasModulePermission(item.id));
+
     const userInitial = user?.email ? user.email.charAt(0).toUpperCase() : 'U';
-    const userRole = user?.role === 'admin' ? 'Administrador' : 'Operador';
+    
+    const getRoleBadge = () => {
+        if (user?.role === 'superadmin') {
+            return (
+                <span className="user-badge superadmin">
+                    <Crown size={12} />
+                    Super Admin
+                </span>
+            );
+        }
+        if (user?.role === 'admin') {
+            return (
+                <span className="user-badge admin">
+                    <ShieldCheck size={12} />
+                    Administrador
+                </span>
+            );
+        }
+        return (
+            <span className="user-badge operator">
+                <User size={12} />
+                Operador
+            </span>
+        );
+    };
 
     return (
         <>
@@ -54,7 +84,9 @@ export default function Sidebar({ activeTab, setActiveTab }) {
 
                 <div className="sidebar-status">
                     <span className="status-dot"></span>
-                    <span className="status-label">Sistema Operativo</span>
+                    <span className="status-label">
+                        {currentCompany?.name ? currentCompany.name.slice(0, 22) : 'Sistema Operativo'}
+                    </span>
                 </div>
 
                 <nav className="sidebar-nav">
@@ -87,10 +119,7 @@ export default function Sidebar({ activeTab, setActiveTab }) {
                             <span className="user-email" title={user?.email}>
                                 {user?.email || 'Usuario'}
                             </span>
-                            <span className="user-badge">
-                                <ShieldCheck size={12} />
-                                {userRole}
-                            </span>
+                            {getRoleBadge()}
                         </div>
                     </div>
 

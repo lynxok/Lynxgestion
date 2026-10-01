@@ -5,11 +5,22 @@ import Statistics from '../components/Statistics';
 import Projects from '../components/Projects';
 import ProjectStats from '../components/ProjectStats';
 import Settings from '../components/Settings';
-import { Receipt, PieChart, FolderKanban, BarChart3, Settings as SettingsIcon, Calendar } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { 
+    Receipt, 
+    PieChart, 
+    FolderKanban, 
+    BarChart3, 
+    Settings as SettingsIcon, 
+    Calendar,
+    Building2,
+    ChevronDown
+} from 'lucide-react';
 import './Dashboard.css';
 
 export default function Dashboard() {
     const [activeTab, setActiveTab] = useState('movements');
+    const { user, companies, currentCompany, switchCompany } = useAuth();
 
     const formattedDate = new Intl.DateTimeFormat('es-AR', {
         weekday: 'long',
@@ -41,8 +52,8 @@ export default function Dashboard() {
                                 <>
                                     <div className="tab-icon-wrapper"><PieChart size={22} /></div>
                                     <div>
-                                        <h1>Estadísticas Financieras</h1>
-                                        <p className="tab-subtitle">Métricas de balance, gastos por responsable y evolución temporal</p>
+                                        <h1>Estadísticas & Balance</h1>
+                                        <p className="tab-subtitle">Métricas de balance por proyectos, categorías y centros de costos</p>
                                     </div>
                                 </>
                             )}
@@ -69,7 +80,7 @@ export default function Dashboard() {
                                     <div className="tab-icon-wrapper"><SettingsIcon size={22} /></div>
                                     <div>
                                         <h1>Módulo de Configuraciones</h1>
-                                        <p className="tab-subtitle">Administración de Cajas, Cuentas, Responsables de Gasto y Proveedores</p>
+                                        <p className="tab-subtitle">Cajas, Categorías, Centros de Costos, Proveedores y Permisos de Usuarios</p>
                                     </div>
                                 </>
                             )}
@@ -77,6 +88,35 @@ export default function Dashboard() {
                     </div>
 
                     <div className="topbar-right">
+                        {/* Multi-Company Selector for Super Admin & Admin */}
+                        {companies.length > 0 && (
+                            <div className="company-selector-badge glass">
+                                <Building2 size={16} className="company-icon" />
+                                <select 
+                                    className="company-select-input"
+                                    value={currentCompany?.id || 'all'}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === 'all') {
+                                            switchCompany({ id: 'all', name: 'Todas las Empresas (Consolidado)' });
+                                        } else {
+                                            const found = companies.find(c => c.id === val);
+                                            if (found) switchCompany(found);
+                                        }
+                                    }}
+                                >
+                                    {user?.role === 'superadmin' && (
+                                        <option value="all">🏢 Todas las Empresas (Consolidado)</option>
+                                    )}
+                                    {companies.map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                            🏢 {c.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
                         <div className="date-badge glass">
                             <Calendar size={15} />
                             <span>{capitalizedDate}</span>
