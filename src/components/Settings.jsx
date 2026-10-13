@@ -509,8 +509,9 @@ export default function Settings() {
     const handleOpenUserModal = (u) => {
         setEditingUser(u);
         const existingPerm = u.user_company_permissions?.[0];
+        const currentRole = (u.role === 'user' || !u.role || u.role === 'unassigned') ? 'operator' : u.role;
         setUserForm({
-            role: u.role || 'operator',
+            role: currentRole,
             is_approved: u.is_approved ?? false,
             company_id: existingPerm?.company_id || (companiesList[0]?.id || ''),
             modules: existingPerm?.modules || ['movements', 'statistics', 'projects', 'project-stats']
