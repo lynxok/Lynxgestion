@@ -4,108 +4,118 @@
 ---
 
 ### 1. INFORMACIÓN GENERAL Y ARQUITECTURA
-**LYNX Gestión** es una plataforma de alta gama para la administración ejecutiva de proyectos, control de movimientos financieros y análisis de métricas en tiempo real.
+**LYNX Gestión** es una plataforma de alta gama para la administración ejecutiva de proyectos, control de movimientos financieros y análisis de rentabilidad/costeo en tiempo real.
 
-- **Frontend:** React 18 + Vite (SPA) con arquitectura Glassmorphism 2.0.
+- **Frontend:** React 18 + Vite (SPA) con arquitectura Glassmorphism 2.0 y soporte responsive.
 - **Tipografía y Estilos:** Plus Jakarta Sans + JetBrains Mono, paleta Dark Slate con acentos dorados/ámbar LYNX.
 - **Notificaciones:** Sistema nativo de Toasts flotantes con retroalimentación no invasiva.
 - **Gráficos y Métricas:** Recharts con gradientes, tooltips personalizados y exportación a CSV/Excel.
-- **Backend & Autenticación:** Supabase (`Gestion LYNX`) con Row Level Security (RLS), trigger de auto-asignación de roles y control de sesión única.
-- **CI/CD & Hosting:** GitHub Actions (Compilación y auto-deploy a rama `gh-pages` + sincronización de producción en `main`).
+- **Backend & Autenticación:** Supabase (`Gestion LYNX`) con Row Level Security (RLS), trigger de auto-asignación de roles, permisos por empresa y control de sesión única.
+- **CI/CD & Hosting:** GitHub Actions (Compilación y auto-deploy a rama `gh-pages` + sincronización de producción en Hostinger/raíz de `main`).
 
 ---
 
 ### 2. ESTRUCTURA DE LA BASE DE DATOS (SUPABASE)
 
-La base de datos `Gestion LYNX` está estructurada en torno a 4 tablas relacionales protegidas mediante políticas RLS:
+La base de datos `Gestion LYNX` está estructurada en torno a tablas relacionales protegidas mediante políticas RLS y multitenancy por empresa:
 
-#### 2.1. Tabla `public.profiles`
-Administra la identidad y los permisos de los usuarios del sistema.
+#### 2.1. Tabla `public.profiles` y `public.user_company_permissions`
+Administra la identidad y los permisos granulares de los usuarios del sistema.
 - `id` (UUID): Clave primaria, vinculada a `auth.users(id)`.
 - `email` (TEXT): Correo electrónico del usuario.
-- `role` (TEXT): Rol asignado (`admin` o `user`).
+- `role` (TEXT): Rol global asignado (`admin`, `director`, `user`).
 - `is_approved` (BOOLEAN): Estado de aprobación para acceder al sistema.
-- `current_session_id` (TEXT): Identificador único de la sesión activa en el navegador.
-- `created_at` / `updated_at`: Marcas de tiempo de auditoría.
+- `current_session_id` (TEXT): Identificador único de la sesión activa en el navegador para evitar accesos concurrentes no autorizados.
+- `user_company_permissions`: Relación N:M que asocia qué rol y permisos tiene el usuario dentro de cada empresa (`can_edit_projects`, `can_edit_movements`, etc.).
 
-> **Regla de negocio:** El trigger `handle_new_user()` asigna automáticamente el rol `admin` y aprueba (`is_approved = true`) al primer usuario registrado en la plataforma. Los siguientes usuarios quedan en estado pendiente hasta ser aprobados por un administrador.
+#### 2.2. Tabla `public.companies`
+Define las unidades de negocio o entidades corporativas (ej. LYNX Central, Consultoría, etc.).
+- Permite filtrar dinámicamente todo el sistema a través del selector de empresa en el encabezado.
 
-#### 2.2. Tabla `public.projects`
-Registra los proyectos de la organización.
-- `id` (UUID): Clave primaria autogenerada.
-- `user_id` (UUID): Creador del proyecto.
-- `name` (TEXT): Nombre del proyecto.
-- `objective` (TEXT): Objetivo general o meta a cumplir.
-- `target_audience` (TEXT): Público objetivo o beneficiarios.
-- `progress` (NUMERIC): Porcentaje de avance ponderado (0 a 100%).
-- `created_at`: Fecha y hora de creación.
+#### 2.3. Tabla `public.cash_boxes` (Cajas & Cuentas)
+Define las fuentes financieras de impacto (ej. Efectivo, Mercado Pago, Personal Pay, Cuentas Bancarias).
+- Cada movimiento debita o acredita directamente sobre una caja específica.
 
-#### 2.3. Tabla `public.project_stages`
-Gestiona las etapas cronológicas de cada proyecto.
-- `id` (UUID): Clave primaria autogenerada.
-- `project_id` (UUID): Relación con la tabla `projects`.
-- `name` (TEXT): Nombre de la etapa o hito.
-- `start_date` (TEXT / DATE): Fecha de inicio estimada.
-- `end_date` (TEXT / DATE): Fecha de finalización estimada.
-- `status` (TEXT): Estado actual (`pending`, `in_progress`, `completed`).
+#### 2.4. Tabla `public.projects` y `public.project_stages`
+Registra los proyectos de la organización y sus hitos de desarrollo.
+- `id` (UUID): Clave primaria.
+- `name` (TEXT): Nombre comercial del proyecto.
+- `objective` / `target_audience`: Alcance y beneficiarios.
+- `progress` (NUMERIC): Porcentaje de avance ponderado (0 a 100%) calculado según etapas completadas.
 
-#### 2.4. Tabla `public.movements`
-Controla el flujo de caja e imputación financiera.
-- `id` (UUID): Clave primaria autogenerada.
-- `user_id` (UUID): Usuario que registró la operación.
-- `type` (TEXT): Tipo de movimiento (`income` / `expense`).
-- `amount` (NUMERIC): Monto de la operación en pesos.
-- `date` (TEXT / DATE): Fecha del movimiento.
-- `description` (TEXT): Detalle o motivo del gasto.
-- `company` (TEXT): Responsable asignado (gastos) o Empresa emisora (ingresos).
-- `account` (TEXT): Cuenta de origen/destino (ej. Mercado Pago, Personal Pay, Cuenta Bancaria).
+#### 2.5. Tabla `public.movements` (Libro Mayor y Tesorería)
+Controla el flujo de caja, la imputación a proyectos y la estructura de costos.
+- `type` (`income` / `expense`): Tipo de transacción.
+- `amount` (NUMERIC): Monto convertido a moneda base contable (**ARS**).
+- `currency` (TEXT): Moneda original de la transacción (`ARS`, `USD`, `EUR`).
+- `amount_currency` (NUMERIC): Monto en la divisa original (ej. 100 USD).
+- `exchange_rate` (NUMERIC): Cotización o Tipo de Cambio aplicado respecto al ARS.
+- `date` (DATE): Fecha efectiva o programada de la transacción.
+- `project_id` (UUID): 
+  - Para **Ingresos:** Obligatorio (asociado al proyecto facturado).
+  - Para **Egresos:** Opcional. Si se completa, es un *Gasto Directo*; si es `null`, es un *Gasto Común de Consultora* distribuible entre proyectos.
+- `cost_center_id` (UUID): Centro de costos imputado (ej. CC-01 Infraestructura & Servidores, CC-02 Comercial, etc.).
+- `supplier_id` (UUID): Proveedor asignado al gasto.
+- `expense_responsible_id` (UUID): Responsable que ejecutó o autorizó el gasto.
+- `cash_box_id` (UUID): Caja de egreso o cobro.
+- `is_recurring` (BOOLEAN): Indica si el gasto fue generado de forma periódica/programada.
+- `recurring_interval` (TEXT): Intervalo de repetición (`weekly`, `biweekly`, `monthly`, `bimonthly`, `yearly`).
+- `recurring_count` (INTEGER): Cantidad total de repeticiones o cuotas.
+- `recurrence_group_id` (UUID): Identificador único que vincula las cuotas de una misma recurrencia.
 
 ---
 
 ### 3. MANUAL DE OPERACIÓN Y FLUJO DE USUARIO
 
-#### 3.1. Acceso y Registro (Login Pro)
-1. Ingresar a la URL oficial del sistema: `https://gestioneslynx.lnx.com.ar/`.
-2. Para nuevos usuarios: Seleccionar la pestaña **Registro**, completar correo y contraseña (con botón de visualización de contraseña).
-3. El primer usuario registrado ingresa de forma inmediata con privilegios de Administrador.
+#### 3.1. Acceso y Control de Empresa
+1. Ingresar a `https://gestioneslynx.lnx.com.ar/`.
+2. En la barra superior, seleccionar la **Empresa Activa** sobre la cual se desea operar o consultar métricas.
 
-#### 3.2. Gestión de Movimientos & Libro Mayor en Vivo
-1. En el menú lateral, seleccionar **Cargar Movimientos**.
-2. **KPIs en Vivo:** Visualiza al instante en la parte superior los totales ingresados, gastados y el balance neto acumulado.
-3. **Cargar Gasto / Ingreso:** Alterna entre las pestañas, completa el formulario y presiona Guardar.
-4. **Historial Integrado:** En el panel lateral derecho, busca transacciones por responsable o motivo, filtra por tipo y elimina registros erróneos con un solo clic.
+#### 3.2. Carga de Ingresos
+1. En el menú lateral, seleccionar **Cargar Movimientos** y activar la pestaña **Ingreso / Cobro**.
+2. **Caja de Destino:** Seleccionar dónde ingresa el dinero (Mercado Pago, Cuenta Bancaria, etc.).
+3. **Proyecto Imputado (Obligatorio):** Todo ingreso debe asociarse a un proyecto creado.
+4. **Categoría de Ingreso:** Hito, anticipo, abono recurrente o servicio profesional.
+5. **Moneda y Tipo de Cambio:** 
+   - Seleccionar `ARS`, `USD` o `EUR`.
+   - Si se selecciona divisa extranjera, ingresar la cotización pactada del día. El sistema calcula en vivo el contravalor en pesos.
+6. Guardar el registro.
 
-#### 3.3. Gestión de Proyectos y Cronogramas (Master-Detail)
-1. En el menú lateral, seleccionar **Gestión de Proyectos**.
-2. **Creación:** Clic en **+ Nuevo Proyecto**, define nombre, público y objetivos.
-3. **Seguimiento de Etapas:** Selecciona un proyecto de la lista, agrega hitos con fechas de inicio/fin y haz clic sobre el ícono de estado para alternar entre *Pendiente*, *En Progreso* y *Completada*. El sistema recalcula el porcentaje de avance automáticamente.
+#### 3.3. Carga de Gastos (Directos, Comunes y Recurrentes)
+1. Activar la pestaña **Gasto / Egreso**.
+2. **Caja de Salida:** Cuenta desde donde se realizó el pago.
+3. **Centro de Costos:** Seleccionar la categoría contable (ej. Infraestructura & Servidores, Nómina, etc.).
+4. **Responsable y Proveedor:** Indicar quién gestionó la compra y a qué proveedor corresponde.
+5. **Imputación del Gasto:**
+   - **Gasto Directo a Proyecto:** Seleccionar un proyecto específico. Ese monto se cargará al 100% como costo directo en la rentabilidad de dicho proyecto.
+   - **Gasto Común de Consultora:** Dejar la opción *🌐 Gasto Común de Consultora (Todos los proyectos)*. Este gasto entrará en la bolsa de costos indirectos a prorratear.
+6. **Repetir este gasto periódicamente:**
+   - Si se trata de un servicio recurrente (hosting, licencias, alquileres), marcar la casilla de verificación.
+   - Indicar la **Periodicidad** (Semanal, Quincenal, Mensual, Bimestral, Anual).
+   - Indicar la **Cantidad de Cuotas/Repeticiones** (de 2 a 24). El sistema autogenerará el calendario de pagos con sus fechas proyectadas correlativas.
+7. **Moneda Extranjera:** Si el proveedor cobra en dólares o euros (ej. Hostinger, AWS, Google Cloud), ingresar la divisa y el tipo de cambio oficial o de tarjeta correspondiente.
+8. Guardar el movimiento.
 
-#### 3.4. Estadísticas Financieras y Exportación
-1. En el menú lateral, seleccionar **Estadísticas Financieras**.
-2. **Filtros Temporales:** Filtra por *Histórico Total*, *Últimos 30 días*, *Último Trimestre* o *Este Año*.
-3. **Métricas Clave:** Ingresos Totales, Gastos Totales, Balance Neto y Tasa de Rendimiento.
-4. **Gráficos Interactivos:** Donut de gastos por responsable y gráfico de barras comparativo de ingresos vs gastos por mes.
-5. **Exportación:** Botón **Exportar a Excel / CSV** para descargar reportes listos para auditoría contable.
-
-#### 3.5. Métricas de Proyectos (Gantt & Tabla Ejecutiva)
-1. En el menú lateral, seleccionar **Métricas de Proyectos**.
-2. **Diagrama de Gantt:** Selecciona cualquier iniciativa para ver su línea de tiempo visual con fechas de inicio y cierre.
-3. **Resumen Ejecutivo:** Tabla consolidada con buscador rápido, estado de avance y número de etapas activas.
+#### 3.4. Matriz de Rentabilidad y Reglas de Asignación por Proyecto
+1. En el menú lateral, seleccionar **Métricas de Proyectos** y luego la pestaña **Costos y Rentabilidad**.
+2. **Reglas de Asignación de Gastos Comunes:**
+   El selector superior permite modelar la rentabilidad según la política contable deseada:
+   - **Prorrateo por Ingresos (% Facturación):** Los costos comunes de la consultora se distribuyen proporcionalmente según la participación de facturación de cada proyecto sobre el total.
+   - **Prorrateo Equitativo (Partes Iguales):** Los costos indirectos se dividen en partes iguales entre la cantidad de proyectos activos.
+   - **Solo Costos Directos:** No traslada gastos comunes a los proyectos; analiza exclusivamente el margen bruto de cada iniciativa.
+3. **Matriz Detallada:**
+   - Visualiza en tabla y tarjetas: Ingresos totales, Costo Directo, Costo Indirecto Asignado, Costo Total y **Margen Neto ($ y %)**.
+   - Los proyectos con rentabilidad saludable se destacan en verde, mientras que desvíos o márgenes negativos se alertan en rojo.
 
 ---
 
-### 4. PROCEDIMIENTO DE DESPLIEGUE CONTINUO (CI/CD)
+### 4. PROCEDIMIENTO DE DESPLIEGUE CONTINUO Y RESPALDOS
 
-#### 4.1. Flujo de Auto-Deploy
-Cada vez que se sube un cambio a la rama `main` en GitHub (`lynxok/Lynxgestion`):
-1. GitHub Actions ejecuta el workflow `.github/workflows/deploy.yml`.
-2. Inyecta los secretos `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
-3. Compila el código con Vite a `dist/` optimizado.
-4. Publica automáticamente el contenido exclusivo de `dist/` en la rama **`gh-pages`** y GitHub Pages.
+#### 4.1. Respaldo Obligatorio de Compilados
+- Ante cada compilación a producción, la carpeta `dist` previa se respalda en `Versiones anteriores/dist_YYYYMMDD_HHMMSS`.
+- Permite restaurar cualquier versión histórica de forma instantánea ante contingencias.
 
-#### 4.2. Mantenimiento Preventivo Supabase (Keep-Alive)
-- El workflow `.github/workflows/keep-alive.yml` se ejecuta automáticamente todos los días a las **12:00 UTC**.
-- Realiza una consulta REST autenticada a la base de datos `Gestion LYNX`, evitando que Supabase suspenda el proyecto por inactividad.
-
-#### 4.3. Política de Respaldo de Versiones
-- Cada vez que se genera un nuevo compilado `dist`, el sistema realiza automáticamente una copia íntegra de la versión previa dentro del directorio `Versiones anteriores/dist_YYYYMMDD_HHMMSS`.
+#### 4.2. Flujo de Build y Sincronización a Hostinger
+1. Vite compila el bundle productivo en `dist/` a partir de `src/main.jsx`.
+2. Los artefactos resultantes se sincronizan directamente al directorio raíz del repositorio para su consumo inmediato por el servidor web de Hostinger.
+3. Se realiza el commit y push a la rama `main` en GitHub (`lynxok/Lynxgestion`).

@@ -398,3 +398,138 @@
     padding: 2rem !important;
     color: var(--color-text-subtle);
 }
+
+/* Sub-Tab Navigation Header */
+.pstats-header-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-glass);
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(16px);
+    width: fit-content;
+}
+
+.pstats-tabs-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.pstats-tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 1.1rem;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-base);
+}
+
+.pstats-tab-btn:hover {
+    color: var(--color-text-primary);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.pstats-tab-btn.active {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(217, 119, 6, 0.1) 100%);
+    color: #FBBF24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.15);
+}
+
+/* Allocation Rules Bar */
+.allocation-rules-card {
+    padding: 1.25rem 1.5rem;
+    border-radius: var(--radius-lg);
+}
+
+.allocation-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.allocation-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+}
+
+.alloc-icon {
+    color: #F59E0B;
+}
+
+.alloc-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.alloc-subtitle {
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+    margin: 0.2rem 0 0 0;
+}
+
+.allocation-pills {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.alloc-rule-btn {
+    padding: 0.5rem 0.95rem;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-base);
+}
+
+.alloc-rule-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--color-text-primary);
+}
+
+.alloc-rule-btn.active {
+    background: rgba(245, 158, 11, 0.2);
+    border-color: rgba(245, 158, 11, 0.4);
+    color: #FBBF24;
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.15);
+}
+
+.status-pill.danger-pill {
+    background: rgba(239, 68, 68, 0.15);
+    color: #EF4444;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.font-mono {
+    font-family: var(--font-mono);
+}
+
+.font-semibold {
+    font-weight: 600;
+}
+
+.font-bold {
+    font-weight: 700;
+}

@@ -493,3 +493,135 @@
     font-size: 0.82rem;
     line-height: 1.4;
 }
+
+/* Recurring Expense Controls */
+.recurring-expense-box {
+    padding: 0.9rem 1.1rem;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(15, 23, 42, 0.4);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.recurring-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.recurring-toggle-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #F59E0B;
+    cursor: pointer;
+}
+
+.recurring-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.recurring-icon {
+    color: #F59E0B;
+}
+
+.recurring-options-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.85rem;
+    padding-top: 0.5rem;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.field-label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.field-hint {
+    font-size: 0.72rem;
+    color: var(--color-text-subtle);
+    font-weight: 500;
+}
+
+/* Additional Ledger Badges */
+.ledger-proj-tag.direct-exp {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60A5FA;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.ledger-proj-tag.common-exp {
+    background: rgba(168, 85, 247, 0.15);
+    color: #C084FC;
+    border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.ledger-recur-tag {
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 0.15rem 0.45rem;
+    border-radius: var(--radius-sm);
+    background: rgba(245, 158, 11, 0.15);
+    color: #FBBF24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* Currency Selection & Exchange Rate Styles */
+.currency-selection-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.85rem;
+    align-items: start;
+}
+
+.currency-select {
+    background: rgba(15, 23, 42, 0.6) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    font-weight: 600;
+    color: #F8FAFC !important;
+}
+
+.currency-conversion-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.65rem 0.9rem;
+    border-radius: var(--radius-md);
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    font-size: 0.82rem;
+    color: #93C5FD;
+}
+
+.currency-conversion-preview strong {
+    font-size: 0.95rem;
+    color: #60A5FA;
+}
+
+.currency-conversion-preview small {
+    font-size: 0.75rem;
+    color: var(--color-text-subtle);
+    margin-left: auto;
+}
+
+.ledger-foreign-currency-badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.1rem 0.45rem;
+    border-radius: var(--radius-sm);
+    background: rgba(16, 185, 129, 0.12);
+    color: #34D399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    display: inline-block;
+    align-self: flex-end;
+}

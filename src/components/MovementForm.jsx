@@ -21,7 +21,9 @@ import {
     FolderKanban,
     Tags,
     Layers,
-    AlertCircle
+    AlertCircle,
+    Repeat,
+    HelpCircle
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
@@ -59,6 +61,13 @@ export default function MovementForm() {
         monto: '',
         fecha: new Date().toISOString().split('T')[0],
         empresa: '',
+        // Moneda y Tipo de Cambio
+        currency: 'ARS', // 'ARS', 'USD', 'EUR'
+        exchange_rate: 1,
+        // Recurrencia
+        is_recurring: false,
+        recurring_interval: 'monthly', // 'weekly', 'biweekly', 'monthly', 'bimonthly', 'yearly'
+        recurring_count: 3,
     });
 
     useEffect(() => {
@@ -183,6 +192,13 @@ export default function MovementForm() {
             return;
         }
 
+        const isForeignCurrency = formData.currency && formData.currency !== 'ARS';
+        const parsedExchangeRate = parseFloat(formData.exchange_rate);
+        if (isForeignCurrency && (!parsedExchangeRate || parsedExchangeRate <= 0)) {
+            toast.error(`Debes ingresar un tipo de cambio válido mayor a 0 para ${formData.currency}`);
+            return;
+        }
+
         if (type === 'income') {
             if (!formData.project_id) {
                 toast.error('Debes seleccionar un proyecto creado para registrar el ingreso');
@@ -205,28 +221,75 @@ export default function MovementForm() {
             const selectedBox = cashBoxes.find(b => b.id === formData.cash_box_id);
             const companyId = (currentCompany && currentCompany.id !== 'all') ? currentCompany.id : null;
 
-            const movementData = {
-                user_id: user.id,
-                type,
-                amount: parseFloat(formData.monto),
-                date: formData.fecha,
-                description: type === 'expense' ? formData.descripcion : (formData.descripcion || 'Cobro / Ingreso de Proyecto'),
-                company: type === 'expense' ? (formData.responsable_name || 'Responsable') : (formData.empresa || 'Cliente'),
-                account: selectedBox ? selectedBox.name : (type === 'income' ? 'Mercado pago' : 'Caja'),
-                cash_box_id: formData.cash_box_id || null,
-                company_id: companyId,
-                // Ingreso specific
-                project_id: type === 'income' ? formData.project_id : null,
-                income_category_id: type === 'income' ? formData.income_category_id : null,
-                // Egreso specific
-                cost_center_id: type === 'expense' ? formData.cost_center_id : null,
-                supplier_id: type === 'expense' && formData.supplier_id ? formData.supplier_id : null,
-                expense_responsible_id: type === 'expense' && formData.responsable_id ? formData.responsable_id : null,
+            const calculateNextDate = (baseDateStr, interval, index) => {
+                const [y, m, d] = baseDateStr.split('-').map(Number);
+                const dateObj = new Date(y, m - 1, d);
+                if (interval === 'weekly') {
+                    dateObj.setDate(dateObj.getDate() + (7 * index));
+                } else if (interval === 'biweekly') {
+                    dateObj.setDate(dateObj.getDate() + (14 * index));
+                } else if (interval === 'monthly') {
+                    dateObj.setMonth(dateObj.getMonth() + index);
+                } else if (interval === 'bimonthly') {
+                    dateObj.setMonth(dateObj.getMonth() + (2 * index));
+                } else if (interval === 'yearly') {
+                    dateObj.setFullYear(dateObj.getFullYear() + index);
+                }
+                return dateObj.toISOString().split('T')[0];
             };
+
+            const recurrenceGroupId = (type === 'expense' && formData.is_recurring) 
+                ? (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'rec_' + Date.now()) 
+                : null;
+
+            const repeatCount = (type === 'expense' && formData.is_recurring) 
+                ? Math.max(1, Math.min(24, parseInt(formData.recurring_count) || 1)) 
+                : 1;
+
+            const baseAmountCurrency = parseFloat(formData.monto);
+            const effectiveExchangeRate = isForeignCurrency ? parsedExchangeRate : 1;
+            const amountInArs = Math.round((baseAmountCurrency * effectiveExchangeRate) * 100) / 100;
+
+            const movementsToInsert = [];
+
+            for (let i = 0; i < repeatCount; i++) {
+                const movDate = i === 0 ? formData.fecha : calculateNextDate(formData.fecha, formData.recurring_interval, i);
+                const descSuffix = repeatCount > 1 ? ` (${i + 1}/${repeatCount})` : '';
+
+                movementsToInsert.push({
+                    user_id: user.id,
+                    type,
+                    amount: amountInArs,
+                    currency: formData.currency || 'ARS',
+                    amount_currency: baseAmountCurrency,
+                    exchange_rate: effectiveExchangeRate,
+                    date: movDate,
+                    description: (type === 'expense' 
+                        ? (formData.descripcion + descSuffix) 
+                        : (formData.descripcion || 'Cobro / Ingreso de Proyecto')),
+                    company: type === 'expense' 
+                        ? (formData.responsable_name || 'Responsable') 
+                        : (formData.empresa || 'Cliente'),
+                    account: selectedBox ? selectedBox.name : (type === 'income' ? 'Mercado pago' : 'Caja'),
+                    cash_box_id: formData.cash_box_id || null,
+                    company_id: companyId,
+                    // Imputación a Proyecto (Permite proyectos específicos O común a la consultora)
+                    project_id: formData.project_id || null,
+                    income_category_id: type === 'income' ? formData.income_category_id : null,
+                    // Egreso specific
+                    cost_center_id: type === 'expense' ? formData.cost_center_id : null,
+                    supplier_id: type === 'expense' && formData.supplier_id ? formData.supplier_id : null,
+                    expense_responsible_id: type === 'expense' && formData.responsable_id ? formData.responsable_id : null,
+                    is_recurring: type === 'expense' && formData.is_recurring,
+                    recurring_interval: (type === 'expense' && formData.is_recurring) ? formData.recurring_interval : null,
+                    recurring_count: (type === 'expense' && formData.is_recurring) ? repeatCount : 1,
+                    recurrence_group_id: recurrenceGroupId
+                });
+            }
 
             const { data, error } = await supabase
                 .from('movements')
-                .insert([movementData])
+                .insert(movementsToInsert)
                 .select(`
                     *,
                     cash_boxes(name, type),
@@ -239,10 +302,14 @@ export default function MovementForm() {
 
             if (error) throw error;
 
-            toast.success(type === 'expense' ? 'Gasto registrado correctamente' : 'Ingreso registrado correctamente');
+            if (repeatCount > 1) {
+                toast.success(`Se generaron ${repeatCount} cuotas/repeticiones del gasto correctamente`);
+            } else {
+                toast.success(type === 'expense' ? 'Gasto registrado correctamente' : 'Ingreso registrado correctamente');
+            }
 
-            if (data && data[0]) {
-                setMovements(prev => [data[0], ...prev]);
+            if (data && data.length > 0) {
+                setMovements(prev => [...data, ...prev]);
             } else {
                 fetchInitialData();
             }
@@ -253,7 +320,11 @@ export default function MovementForm() {
                 descripcion: '',
                 monto: '',
                 empresa: '',
+                currency: 'ARS',
+                exchange_rate: 1,
                 fecha: new Date().toISOString().split('T')[0],
+                is_recurring: false,
+                recurring_count: 3
             }));
         } catch (error) {
             console.error('Error saving movement:', error);
@@ -512,17 +583,20 @@ export default function MovementForm() {
                                     </select>
                                 </div>
 
-                                {/* Proyecto imputado en gasto */}
+                                {/* Proyecto imputado en gasto: Específico o Común */}
                                 <div className="form-field">
-                                    <label><FolderKanban size={15} /> Proyecto Imputado (Opcional)</label>
+                                    <div className="field-label-row">
+                                        <label><FolderKanban size={15} /> Imputación del Gasto</label>
+                                        <span className="field-hint">Directo o Común</span>
+                                    </div>
                                     <select 
                                         name="project_id" 
                                         value={formData.project_id} 
                                         onChange={handleChange}
                                     >
-                                        <option value="">Sin Proyecto asignado...</option>
+                                        <option value="">🌐 Gasto Común de Consultora (Todos los proyectos)</option>
                                         {projects.map((p) => (
-                                            <option key={p.id} value={p.id}>📁 {p.name}</option>
+                                            <option key={p.id} value={p.id}>📁 Proyecto Directo: {p.name}</option>
                                         ))}
                                     </select>
                                 </div>
@@ -538,12 +612,107 @@ export default function MovementForm() {
                                         placeholder="Ej. Servidores Cloud, Licencias Figma, Viáticos"
                                     />
                                 </div>
+
+                                {/* Opciones de Gasto Recurrente / Repetir */}
+                                <div className="recurring-expense-box glass">
+                                    <label className="recurring-toggle-label">
+                                        <input
+                                            type="checkbox"
+                                            name="is_recurring"
+                                            checked={formData.is_recurring}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, is_recurring: e.target.checked }))}
+                                        />
+                                        <div className="recurring-title-wrap">
+                                            <Repeat size={16} className="recurring-icon" />
+                                            <span>Repetir este gasto periódicamente</span>
+                                        </div>
+                                    </label>
+
+                                    {formData.is_recurring && (
+                                        <div className="recurring-options-grid fade-in">
+                                            <div className="form-field">
+                                                <label>Periodicidad</label>
+                                                <select
+                                                    name="recurring_interval"
+                                                    value={formData.recurring_interval}
+                                                    onChange={handleChange}
+                                                >
+                                                    <option value="weekly">Semanal (Cada 7 días)</option>
+                                                    <option value="biweekly">Quincenal (Cada 14 días)</option>
+                                                    <option value="monthly">Mensual (Mismo día cada mes)</option>
+                                                    <option value="bimonthly">Bimestral (Cada 2 meses)</option>
+                                                    <option value="yearly">Anual (Cada 12 meses)</option>
+                                                </select>
+                                            </div>
+
+                                            <div className="form-field">
+                                                <label>Cuotas / Veces a Repetir</label>
+                                                <input
+                                                    type="number"
+                                                    name="recurring_count"
+                                                    value={formData.recurring_count}
+                                                    onChange={handleChange}
+                                                    min="2"
+                                                    max="24"
+                                                    placeholder="Ej. 6"
+                                                    required
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </>
+                        )}
+
+                        {/* Moneda y Tipo de Cambio */}
+                        <div className="currency-selection-row">
+                            <div className="form-field currency-field">
+                                <label><DollarSign size={15} /> Moneda</label>
+                                <select
+                                    name="currency"
+                                    value={formData.currency}
+                                    onChange={handleChange}
+                                    className="currency-select"
+                                >
+                                    <option value="ARS">ARS ($ - Pesos Argentinos)</option>
+                                    <option value="USD">USD (u$s - Dólares Estadounidenses)</option>
+                                    <option value="EUR">EUR (€ - Euros)</option>
+                                </select>
+                            </div>
+
+                            {formData.currency !== 'ARS' && (
+                                <div className="form-field exchange-rate-field fade-in">
+                                    <label><TrendingUp size={15} /> Tipo de Cambio ($ / ARS) *</label>
+                                    <input
+                                        type="number"
+                                        name="exchange_rate"
+                                        value={formData.exchange_rate}
+                                        onChange={handleChange}
+                                        placeholder="Ej. 1350"
+                                        min="0.01"
+                                        step="0.01"
+                                        required
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        {formData.currency !== 'ARS' && formData.monto && formData.exchange_rate && (
+                            <div className="currency-conversion-preview fade-in">
+                                <span>Conversión estimada a ARS:</span>
+                                <strong>
+                                    {formatCurrency((parseFloat(formData.monto) || 0) * (parseFloat(formData.exchange_rate) || 0))}
+                                </strong>
+                                <small>({formData.currency} {parseFloat(formData.monto) || 0} × ${formData.exchange_rate})</small>
+                            </div>
                         )}
 
                         <div className="form-row">
                             <div className="form-field">
-                                <label><DollarSign size={15} /> Monto ($)</label>
+                                <label>
+                                    <DollarSign size={15} /> 
+                                    Monto {formData.currency === 'USD' ? '(USD u$s)' : formData.currency === 'EUR' ? '(EUR €)' : '($ ARS)'} *
+                                </label>
                                 <input
                                     type="number"
                                     name="monto"
@@ -557,7 +726,7 @@ export default function MovementForm() {
                             </div>
 
                             <div className="form-field">
-                                <label><Calendar size={15} /> Fecha</label>
+                                <label><Calendar size={15} /> Fecha *</label>
                                 <input
                                     type="date"
                                     name="fecha"
@@ -666,8 +835,14 @@ export default function MovementForm() {
                                                         </>
                                                     ) : (
                                                         <>
+                                                            {projName ? (
+                                                                <span className="ledger-proj-tag direct-exp">📁 {projName}</span>
+                                                            ) : (
+                                                                <span className="ledger-proj-tag common-exp">🌐 Gasto Común</span>
+                                                            )}
                                                             {ccName && <span className="ledger-cc-tag">📊 {ccName}</span>}
                                                             {suppName && <span className="ledger-supp-tag">🚚 {suppName}</span>}
+                                                            {item.is_recurring && <span className="ledger-recur-tag">🔄 Recurrente</span>}
                                                         </>
                                                     )}
                                                     <span className="ledger-secondary-text">
@@ -682,6 +857,11 @@ export default function MovementForm() {
                                                 <span className={`ledger-amount ${isIncome ? 'text-success' : 'text-danger'}`}>
                                                     {isIncome ? '+' : '-'} {formatCurrency(item.amount)}
                                                 </span>
+                                                {item.currency && item.currency !== 'ARS' && (
+                                                    <span className="ledger-foreign-currency-badge">
+                                                        {item.currency === 'USD' ? 'u$s' : item.currency} {Number(item.amount_currency || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (TC: ${item.exchange_rate})
+                                                    </span>
+                                                )}
                                                 <span className="ledger-date">{item.date}</span>
                                             </div>
                                             <button 
