@@ -22,7 +22,7 @@ import { useToast } from '../context/ToastContext';
 import './Projects.css';
 
 export default function Projects() {
-    const { user } = useAuth();
+    const { user, currentCompany } = useAuth();
     const { toast } = useToast();
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -47,21 +47,31 @@ export default function Projects() {
 
     useEffect(() => {
         fetchProjects();
-    }, []);
+    }, [currentCompany]);
 
     const fetchProjects = async () => {
         try {
             setLoading(true);
-            const { data, error } = await supabase
+            const companyId = (currentCompany && currentCompany.id !== 'all') ? currentCompany.id : null;
+            let query = supabase
                 .from('projects')
                 .select('*')
                 .order('created_at', { ascending: false });
 
+            if (companyId) {
+                query = query.or(`company_id.eq.${companyId},company_id.is.null`);
+            }
+
+            const { data, error } = await query;
+
             if (error) throw error;
             setProjects(data || []);
-            if (data && data.length > 0 && !selectedProject) {
+            if (data && data.length > 0) {
                 setSelectedProject(data[0]);
                 fetchStages(data[0].id);
+            } else {
+                setSelectedProject(null);
+                setStages([]);
             }
         } catch (error) {
             console.error('Error fetching projects:', error);
@@ -95,6 +105,8 @@ export default function Projects() {
         }
 
         try {
+            const companyId = (currentCompany && currentCompany.id !== 'all') ? currentCompany.id : null;
+
             const { data, error } = await supabase
                 .from('projects')
                 .insert([{
@@ -102,7 +114,8 @@ export default function Projects() {
                     objective: formData.objective,
                     target_audience: formData.target_audience,
                     progress: parseInt(formData.progress) || 0,
-                    user_id: user.id
+                    user_id: user.id,
+                    company_id: companyId
                 }])
                 .select();
 

@@ -43,7 +43,8 @@ export default function Statistics() {
     const fetchMovements = async () => {
         try {
             setLoading(true);
-            const { data, error } = await supabase
+            const companyId = (currentCompany && currentCompany.id !== 'all') ? currentCompany.id : null;
+            let query = supabase
                 .from('movements')
                 .select(`
                     *,
@@ -55,6 +56,12 @@ export default function Statistics() {
                     cash_boxes(name)
                 `)
                 .order('date', { ascending: true });
+
+            if (companyId) {
+                query = query.or(`company_id.eq.${companyId},company_id.is.null`);
+            }
+
+            const { data, error } = await query;
 
             if (error) throw error;
             setMovements(data || []);

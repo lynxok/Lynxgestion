@@ -20,7 +20,8 @@ import {
     DollarSign,
     FolderKanban,
     Tags,
-    Layers
+    Layers,
+    AlertCircle
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
@@ -67,23 +68,34 @@ export default function MovementForm() {
     const fetchInitialData = async () => {
         try {
             setFetching(true);
+            const companyId = (currentCompany && currentCompany.id !== 'all') ? currentCompany.id : null;
+
+            let movQuery = supabase
+                .from('movements')
+                .select(`
+                    *,
+                    cash_boxes(name, type),
+                    projects(name),
+                    income_categories(name),
+                    cost_centers(name, code),
+                    suppliers(name),
+                    expense_responsibles(name)
+                `)
+                .order('date', { ascending: false })
+                .order('created_at', { ascending: false })
+                .limit(50);
+
+            let projQuery = supabase.from('projects').select('*').order('name', { ascending: true });
+
+            if (companyId) {
+                movQuery = movQuery.or(`company_id.eq.${companyId},company_id.is.null`);
+                projQuery = projQuery.or(`company_id.eq.${companyId},company_id.is.null`);
+            }
+
             const [movRes, boxRes, projRes, catRes, ccRes, respRes, suppRes] = await Promise.all([
-                supabase
-                    .from('movements')
-                    .select(`
-                        *,
-                        cash_boxes(name, type),
-                        projects(name),
-                        income_categories(name),
-                        cost_centers(name, code),
-                        suppliers(name),
-                        expense_responsibles(name)
-                    `)
-                    .order('date', { ascending: false })
-                    .order('created_at', { ascending: false })
-                    .limit(50),
+                movQuery,
                 supabase.from('cash_boxes').select('*').order('created_at', { ascending: true }),
-                supabase.from('projects').select('*').order('name', { ascending: true }),
+                projQuery,
                 supabase.from('income_categories').select('*').order('name', { ascending: true }),
                 supabase.from('cost_centers').select('*').order('name', { ascending: true }),
                 supabase.from('expense_responsibles').select('*').order('name', { ascending: true }),
@@ -171,6 +183,22 @@ export default function MovementForm() {
             return;
         }
 
+        if (type === 'income') {
+            if (!formData.project_id) {
+                toast.error('Debes seleccionar un proyecto creado para registrar el ingreso');
+                return;
+            }
+            if (!formData.income_category_id) {
+                toast.error('Debes seleccionar una categoría de ingreso');
+                return;
+            }
+        } else {
+            if (!formData.cost_center_id) {
+                toast.error('Debes seleccionar un centro de costos para el gasto');
+                return;
+            }
+        }
+
         setLoading(true);
 
         try {
@@ -188,10 +216,10 @@ export default function MovementForm() {
                 cash_box_id: formData.cash_box_id || null,
                 company_id: companyId,
                 // Ingreso specific
-                project_id: formData.project_id || null,
-                income_category_id: type === 'income' ? (formData.income_category_id || null) : null,
+                project_id: type === 'income' ? formData.project_id : null,
+                income_category_id: type === 'income' ? formData.income_category_id : null,
                 // Egreso specific
-                cost_center_id: type === 'expense' ? (formData.cost_center_id || null) : null,
+                cost_center_id: type === 'expense' ? formData.cost_center_id : null,
                 supplier_id: type === 'expense' && formData.supplier_id ? formData.supplier_id : null,
                 expense_responsible_id: type === 'expense' && formData.responsable_id ? formData.responsable_id : null,
             };
@@ -366,31 +394,39 @@ export default function MovementForm() {
                         {/* --- CAMPOS PARA INGRESO --- */}
                         {type === 'income' ? (
                             <>
-                                {/* Proyecto X */}
+                                {/* Proyecto Imputado Obligatorio */}
                                 <div className="form-field">
-                                    <label><FolderKanban size={15} /> Proyecto Imputado (Proyecto "X")</label>
-                                    <select 
-                                        name="project_id" 
-                                        value={formData.project_id} 
-                                        onChange={handleChange}
-                                    >
-                                        <option value="">Selecciona Proyecto (Opcional)...</option>
-                                        {projects.map((p) => (
-                                            <option key={p.id} value={p.id}>📁 {p.name}</option>
-                                        ))}
-                                    </select>
+                                    <label><FolderKanban size={15} /> Proyecto Imputado (Obligatorio) *</label>
+                                    {projects.length === 0 ? (
+                                        <div className="form-warning-alert">
+                                            <AlertCircle size={16} />
+                                            <span>No hay proyectos registrados en esta empresa. Crea un proyecto en el módulo <strong>Proyectos</strong> antes de registrar ingresos.</span>
+                                        </div>
+                                    ) : (
+                                        <select 
+                                            name="project_id" 
+                                            value={formData.project_id} 
+                                            onChange={handleChange}
+                                            required
+                                        >
+                                            <option value="">-- Selecciona un Proyecto Creado --</option>
+                                            {projects.map((p) => (
+                                                <option key={p.id} value={p.id}>📁 {p.name}</option>
+                                            ))}
+                                        </select>
+                                    )}
                                 </div>
 
                                 {/* Categoría de Ingreso */}
                                 <div className="form-field">
-                                    <label><Tags size={15} /> Categoría de Ingreso</label>
+                                    <label><Tags size={15} /> Categoría de Ingreso *</label>
                                     <select 
                                         name="income_category_id" 
                                         value={formData.income_category_id} 
                                         onChange={handleChange}
                                         required
                                     >
-                                        <option value="">Selecciona categoría...</option>
+                                        <option value="">-- Selecciona Categoría --</option>
                                         {incomeCategories.map((c) => (
                                             <option key={c.id} value={c.id}>🏷️ {c.name}</option>
                                         ))}
@@ -398,7 +434,7 @@ export default function MovementForm() {
                                 </div>
 
                                 <div className="form-field">
-                                    <label><Building2 size={15} /> Cliente o Empresa Pagadora</label>
+                                    <label><Building2 size={15} /> Cliente o Empresa Pagadora *</label>
                                     <input
                                         type="text"
                                         name="empresa"
